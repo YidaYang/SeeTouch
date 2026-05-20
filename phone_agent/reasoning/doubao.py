@@ -1,0 +1,164 @@
+"""默认 Reasoner 实现:Doubao Vision via Volcengine OpenAI-compatible API。
+
+不依赖比赛 BaseAgent,自己控制 model / API URL / 采样参数 / thinking 开关。
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from dataclasses import dataclass
+from typing import Any
+
+from PIL import Image
+
+from ..core.action import ACTION_COMPLETE, Action, ActionOutput
+from ..perception.screen import encode_image_data_url
+from .base import StepRecord
+from .parser import ParseError, parse_model_output
+from .prompts import build_history_summary, build_system_prompt, extract_summary_fields
+
+
+logger = logging.getLogger(__name__)
+
+
+DEFAULT_API_URL = "https://ark.cn-beijing.volces.com/api/v3"
+DEFAULT_MODEL_ID = "doubao-seed-1-6-vision-250815"
+
+
+@dataclass
+class DoubaoConfig:
+    api_key: str
+    api_url: str = DEFAULT_API_URL
+    model_id: str = DEFAULT_MODEL_ID
+    temperature: float | None = None
+    top_p: float | None = None
+    disable_thinking: bool = True
+    history_window: int = 8
+
+    @classmethod
+    def from_env(cls) -> "DoubaoConfig":
+        api_key = os.environ.get("VLM_API_KEY") or os.environ.get("DOUBAO_API_KEY", "")
+        if not api_key:
+            raise RuntimeError(
+                "missing VLM_API_KEY (or DOUBAO_API_KEY) environment variable"
+            )
+        return cls(
+            api_key=api_key,
+            api_url=os.environ.get("DOUBAO_API_URL", DEFAULT_API_URL),
+            model_id=os.environ.get("DOUBAO_MODEL_ID", DEFAULT_MODEL_ID),
+        )
+
+
+class DoubaoReasoner:
+    """直连 Volcengine 的 Doubao Vision Reasoner。"""
+
+    def __init__(self, config: DoubaoConfig | None = None):
+        self._config = config or DoubaoConfig.from_env()
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise RuntimeError("openai package missing. run: pip install openai") from exc
+        self._client = OpenAI(base_url=self._config.api_url, api_key=self._config.api_key)
+
+    def predict(
+        self,
+        instruction: str,
+        screenshot: Image.Image,
+        history: list[StepRecord],
+    ) -> ActionOutput:
+        messages = self._build_messages(instruction, screenshot, history)
+
+        try:
+            response = self._call_api(messages)
+            raw_output = self._extract_response_text(response)
+            usage = self._extract_usage(response)
+        except Exception as exc:
+            logger.error("doubao api call failed: %s", exc)
+            return ActionOutput(
+                action=Action(type=ACTION_COMPLETE, parameters={}),
+                raw_output=f"Error: {type(exc).__name__}: {exc}",
+                screen_summary="",
+                action_summary="API 调用失败,任务终止",
+            )
+
+        summary = extract_summary_fields(raw_output)
+
+        try:
+            action = parse_model_output(raw_output, screenshot.size)
+        except ParseError as exc:
+            logger.warning("parse model output failed: %s", exc)
+            return ActionOutput(
+                action=Action(type=ACTION_COMPLETE, parameters={}),
+                raw_output=raw_output,
+                screen_summary=summary.get("screen_summary", ""),
+                action_summary="模型输出无法解析,任务终止",
+                usage=usage,
+            )
+
+        return ActionOutput(
+            action=action,
+            raw_output=raw_output,
+            screen_summary=summary.get("screen_summary", ""),
+            action_summary=summary.get("action_summary", ""),
+            usage=usage,
+        )
+
+    # ---------------------------- 内部 ----------------------------
+
+    def _build_messages(
+        self,
+        instruction: str,
+        screenshot: Image.Image,
+        history: list[StepRecord],
+    ) -> list[dict[str, Any]]:
+        history_text = build_history_summary(history, n_recent=self._config.history_window)
+        system_prompt = build_system_prompt(instruction, history_text)
+
+        return [
+            {"role": "user", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": encode_image_data_url(screenshot)},
+                    }
+                ],
+            },
+        ]
+
+    def _call_api(self, messages: list[dict[str, Any]]) -> Any:
+        kwargs: dict[str, Any] = {
+            "model": self._config.model_id,
+            "messages": messages,
+        }
+        if self._config.temperature is not None:
+            kwargs["temperature"] = self._config.temperature
+        if self._config.top_p is not None:
+            kwargs["top_p"] = self._config.top_p
+        if self._config.disable_thinking:
+            kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+
+        logger.info("[API call] model=%s url=%s", self._config.model_id, self._config.api_url)
+        return self._client.chat.completions.create(**kwargs)
+
+    def _extract_response_text(self, response: Any) -> str:
+        try:
+            content = response.choices[0].message.content
+        except Exception:
+            return str(response)
+        if isinstance(content, str):
+            return content
+        import json
+        return json.dumps(content, ensure_ascii=False)
+
+    def _extract_usage(self, response: Any) -> dict[str, Any] | None:
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return None
+        return {
+            "input_tokens": getattr(usage, "prompt_tokens", 0) or getattr(usage, "input_tokens", 0),
+            "output_tokens": getattr(usage, "completion_tokens", 0) or getattr(usage, "output_tokens", 0),
+            "total_tokens": getattr(usage, "total_tokens", 0),
+        }
