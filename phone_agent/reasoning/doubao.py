@@ -25,6 +25,13 @@ logger = logging.getLogger(__name__)
 DEFAULT_API_URL = "https://ark.cn-beijing.volces.com/api/v3"
 DEFAULT_MODEL_ID = "doubao-seed-1-6-vision-250815"
 
+# Doubao thinking mode: 决定模型是否在内部做 VisualCoT 推理
+#   "disabled" - 不思考,响应快、便宜,但复杂场景准确率低
+#   "enabled"  - 总是思考,慢、贵,简单任务也会浪费
+#   "auto"     - 模型自己判断,产品默认值
+THINKING_MODES = {"disabled", "enabled", "auto"}
+DEFAULT_THINKING_MODE = "auto"
+
 
 @dataclass
 class DoubaoConfig:
@@ -33,8 +40,14 @@ class DoubaoConfig:
     model_id: str = DEFAULT_MODEL_ID
     temperature: float | None = None
     top_p: float | None = None
-    disable_thinking: bool = True
+    thinking_mode: str = DEFAULT_THINKING_MODE
     history_window: int = 8
+
+    def __post_init__(self) -> None:
+        if self.thinking_mode not in THINKING_MODES:
+            raise ValueError(
+                f"thinking_mode must be one of {THINKING_MODES}, got {self.thinking_mode!r}"
+            )
 
     @classmethod
     def from_env(cls) -> "DoubaoConfig":
@@ -47,6 +60,7 @@ class DoubaoConfig:
             api_key=api_key,
             api_url=os.environ.get("DOUBAO_API_URL", DEFAULT_API_URL),
             model_id=os.environ.get("DOUBAO_MODEL_ID", DEFAULT_MODEL_ID),
+            thinking_mode=os.environ.get("PHONE_AGENT_THINKING_MODE", DEFAULT_THINKING_MODE),
         )
 
 
@@ -137,10 +151,12 @@ class DoubaoReasoner:
             kwargs["temperature"] = self._config.temperature
         if self._config.top_p is not None:
             kwargs["top_p"] = self._config.top_p
-        if self._config.disable_thinking:
-            kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        kwargs["extra_body"] = {"thinking": {"type": self._config.thinking_mode}}
 
-        logger.info("[API call] model=%s url=%s", self._config.model_id, self._config.api_url)
+        logger.info(
+            "[API call] model=%s thinking=%s",
+            self._config.model_id, self._config.thinking_mode,
+        )
         return self._client.chat.completions.create(**kwargs)
 
     def _extract_response_text(self, response: Any) -> str:
@@ -157,8 +173,18 @@ class DoubaoReasoner:
         usage = getattr(response, "usage", None)
         if usage is None:
             return None
-        return {
+        out = {
             "input_tokens": getattr(usage, "prompt_tokens", 0) or getattr(usage, "input_tokens", 0),
             "output_tokens": getattr(usage, "completion_tokens", 0) or getattr(usage, "output_tokens", 0),
             "total_tokens": getattr(usage, "total_tokens", 0),
         }
+        # thinking 开启后,reasoning_tokens 反映思考用了多少 token
+        details = (
+            getattr(usage, "completion_tokens_details", None)
+            or getattr(usage, "output_tokens_details", None)
+        )
+        if details is not None:
+            reasoning = getattr(details, "reasoning_tokens", None)
+            if reasoning:
+                out["reasoning_tokens"] = reasoning
+        return out
