@@ -9,17 +9,18 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 
-ActionType = Literal["CLICK", "TYPE", "SCROLL", "OPEN", "COMPLETE"]
+ActionType = Literal["CLICK", "TYPE", "SCROLL", "OPEN", "WAIT", "COMPLETE"]
 
 
 ACTION_CLICK: ActionType = "CLICK"
 ACTION_TYPE: ActionType = "TYPE"
 ACTION_SCROLL: ActionType = "SCROLL"
 ACTION_OPEN: ActionType = "OPEN"
+ACTION_WAIT: ActionType = "WAIT"
 ACTION_COMPLETE: ActionType = "COMPLETE"
 
 VALID_ACTIONS: frozenset[str] = frozenset(
-    {ACTION_CLICK, ACTION_TYPE, ACTION_SCROLL, ACTION_OPEN, ACTION_COMPLETE}
+    {ACTION_CLICK, ACTION_TYPE, ACTION_SCROLL, ACTION_OPEN, ACTION_WAIT, ACTION_COMPLETE}
 )
 
 
@@ -32,6 +33,7 @@ class Action:
         TYPE:     {"text": "..."}
         SCROLL:   {"start_point": [x, y], "end_point": [x, y]}
         OPEN:     {"app_name": "..."}    # 中文名 或 Android package
+        WAIT:     {} 或 {"seconds": float}  # 等待界面加载 / 动画 / 弹窗消失
         COMPLETE: {}
     """
 
@@ -57,6 +59,10 @@ class Action:
         elif self.type == ACTION_OPEN:
             if not isinstance(self.parameters.get("app_name"), str):
                 raise ValueError("OPEN requires parameters.app_name (str)")
+        elif self.type == ACTION_WAIT:
+            seconds = self.parameters.get("seconds")
+            if seconds is not None and not isinstance(seconds, (int, float)):
+                raise ValueError("WAIT.seconds must be number if present")
         # COMPLETE: no params required
 
 

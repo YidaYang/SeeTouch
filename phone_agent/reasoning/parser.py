@@ -16,6 +16,7 @@ from ..core.action import (
     ACTION_OPEN,
     ACTION_SCROLL,
     ACTION_TYPE,
+    ACTION_WAIT,
     VALID_ACTIONS,
     Action,
 )
@@ -125,6 +126,12 @@ def _normalize_parsed_action(
     if action_type == ACTION_COMPLETE:
         return Action(type=ACTION_COMPLETE, parameters={})
 
+    if action_type == ACTION_WAIT:
+        seconds = params.get("seconds") or params.get("duration")
+        if isinstance(seconds, (int, float)) and seconds > 0:
+            return Action(type=ACTION_WAIT, parameters={"seconds": float(seconds)})
+        return Action(type=ACTION_WAIT, parameters={})
+
     return None
 
 
@@ -133,7 +140,7 @@ def _normalize_parsed_action(
 
 def _parse_simple_action(text: str, image_size: Tuple[int, int]) -> Action | None:
     match = re.search(
-        r"\b(CLICK|TYPE|OPEN|SCROLL|COMPLETE)\b\s*[:：]\s*(.*)",
+        r"\b(CLICK|TYPE|OPEN|SCROLL|WAIT|COMPLETE)\b\s*[:：]\s*(.*)",
         text,
         re.IGNORECASE | re.DOTALL,
     )
@@ -175,10 +182,10 @@ def _parse_simple_action(text: str, image_size: Tuple[int, int]) -> Action | Non
     if action_type == ACTION_COMPLETE:
         return Action(type=ACTION_COMPLETE, parameters={})
 
+    if action_type == ACTION_WAIT:
+        return Action(type=ACTION_WAIT, parameters={})
+
     return None
-
-
-# ---------------------------- 坐标解析 helpers ----------------------------
 
 
 def _point_from_xy(x_value: Any, y_value: Any) -> list[float] | None:

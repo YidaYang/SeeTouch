@@ -67,3 +67,18 @@ class DeviceController(Protocol):
     def go_home(self) -> None:
         """回到桌面。"""
         ...
+
+    def current_app(self) -> str | None:
+        """当前前台 app 的 package name。无法获取时返回 None。
+
+        Runner 用此判断 OPEN 是否真的把目标 app 推到了前台,
+        以及视觉兜底过程中前台是否已经从桌面切到了某个真实 app。
+        """
+        ...
+
+    def learn_app_from_visual(self, request: str, package: str) -> None:
+        """视觉兜底成功后,把(用户/模型给出的名字 -> 实际 package)记入持久化缓存。
+
+        非 Android 实现可以无操作。
+        """
+        ...

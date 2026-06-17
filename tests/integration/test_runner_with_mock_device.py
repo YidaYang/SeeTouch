@@ -11,6 +11,7 @@ from phone_agent.core.action import (
     ACTION_CLICK,
     ACTION_COMPLETE,
     ACTION_OPEN,
+    ACTION_SCROLL,
     ACTION_TYPE,
     Action,
     ActionOutput,
@@ -25,6 +26,8 @@ class MockDevice:
     def __init__(self, screen_size=(1080, 2400)):
         self._size = screen_size
         self.actions: list[tuple[str, tuple]] = []
+        self._current_app: str | None = None
+        self.learned: list[tuple[str, str]] = []
 
     def screenshot(self) -> Image.Image:
         return Image.new("RGB", self._size, (255, 255, 255))
@@ -46,6 +49,12 @@ class MockDevice:
 
     def go_home(self):
         self.actions.append(("home", ()))
+
+    def current_app(self) -> str | None:
+        return self._current_app
+
+    def learn_app_from_visual(self, request: str, package: str) -> None:
+        self.learned.append((request, package))
 
 
 class MockReasoner:
@@ -141,12 +150,26 @@ def test_runner_aborts_on_user_denial(tmp_path: Path):
 
 
 def test_runner_handles_open_app_visual_fallback(tmp_path: Path):
-    """OpenAppNeedsVisual 不应算失败,应继续 loop 让 reasoner 处理。"""
+    """OpenAppNeedsVisual 不应算失败,应继续 loop 让 reasoner 处理。
+    点击图标后前台变化时,Runner 应触发 learn_app_from_visual 回写 cache。
+    """
 
     class VisualFallbackDevice(MockDevice):
+        def __init__(self):
+            super().__init__()
+            self._current_app = "com.miui.home"  # 初始在桌面
+            self._click_count = 0
+
         def open_app(self, name):
             self.actions.append(("open", (name,)))
             raise OpenAppNeedsVisual(name)
+
+        def click(self, x, y):
+            super().click(x, y)
+            # 模拟点击图标后前台变成目标 app
+            self._click_count += 1
+            if self._click_count == 1:
+                self._current_app = "com.weird.unknown"
 
     device = VisualFallbackDevice()
     reasoner = MockReasoner([
@@ -154,7 +177,6 @@ def test_runner_handles_open_app_visual_fallback(tmp_path: Path):
             action=Action(type=ACTION_OPEN, parameters={"app_name": "极冷门app"}),
             action_summary="启动极冷门app",
         ),
-        # 第二步 reasoner 看到桌面后点图标
         ActionOutput(
             action=Action(type=ACTION_CLICK, parameters={"point": [200, 600]}),
             action_summary="点击桌面上的极冷门 app 图标",
@@ -175,6 +197,63 @@ def test_runner_handles_open_app_visual_fallback(tmp_path: Path):
 
     assert result.completed
     assert result.total_steps == 3
-    # 第一步的 open + 第二步的 click 应该都被记录到 device
     types = [a[0] for a in device.actions]
     assert types == ["open", "click"]
+    # 关键:视觉兜底成功后,Runner 应该把 (request -> 实际 package) 记下来
+    assert device.learned == [("极冷门app", "com.weird.unknown")]
+
+
+def test_runner_visual_fallback_with_swipe_pages(tmp_path: Path):
+    """模型在桌面翻页找 app,SCROLL 不应触发 learn(因为前台还是桌面)。"""
+
+    class VisualFallbackDevice(MockDevice):
+        def __init__(self):
+            super().__init__()
+            self._current_app = "com.miui.home"
+
+        def open_app(self, name):
+            self.actions.append(("open", (name,)))
+            raise OpenAppNeedsVisual(name)
+
+        def scroll(self, start, end):
+            super().scroll(start, end)
+            # 翻页后还在桌面
+
+        def click(self, x, y):
+            super().click(x, y)
+            self._current_app = "com.target.app"
+
+    device = VisualFallbackDevice()
+    reasoner = MockReasoner([
+        ActionOutput(
+            action=Action(type=ACTION_OPEN, parameters={"app_name": "目标app"}),
+            action_summary="启动",
+        ),
+        ActionOutput(
+            action=Action(type=ACTION_SCROLL, parameters={"start_point": [800, 500], "end_point": [200, 500]}),
+            action_summary="向左翻页",
+        ),
+        ActionOutput(
+            action=Action(type=ACTION_SCROLL, parameters={"start_point": [800, 500], "end_point": [200, 500]}),
+            action_summary="再向左翻页",
+        ),
+        ActionOutput(
+            action=Action(type=ACTION_CLICK, parameters={"point": [300, 700]}),
+            action_summary="点击图标",
+        ),
+        ActionOutput(
+            action=Action(type=ACTION_COMPLETE, parameters={}),
+            action_summary="完成",
+        ),
+    ])
+    runner = Runner(
+        device=device,
+        reasoner=reasoner,
+        guard=Guard(prompt_fn=lambda _msg: False),
+        runs_dir=tmp_path,
+    )
+    result = runner.run(Task(instruction="打开目标app"))
+
+    assert result.completed
+    # 翻页 2 次没切前台,只有点击图标后切换,才学一次
+    assert device.learned == [("目标app", "com.target.app")]

@@ -113,6 +113,18 @@ class AndroidController:
     def go_home(self) -> None:
         self._d.press("home")
 
+    def current_app(self) -> str | None:
+        """当前前台 app 的 package(用于 Runner 判断启动是否成功 / 视觉兜底是否捕获新 app)。"""
+        try:
+            info = self._d.app_current()
+            return info.get("package")
+        except Exception:
+            return None
+
+    def learn_app_from_visual(self, request: str, package: str) -> None:
+        """转给 AppLauncher 写入 learned cache。"""
+        self._launcher.learn_from_visual(request, package)
+
     # ------------------------- 内部 helpers -------------------------
 
     def _safe_app_list(self) -> list[str]:
@@ -121,11 +133,3 @@ class AndroidController:
         except Exception as exc:
             logger.warning("app_list failed: %s", exc)
             return []
-
-    def current_app(self) -> str | None:
-        """当前前台 app 的 package(用于 Runner 判断启动是否成功)。"""
-        try:
-            info = self._d.app_current()
-            return info.get("package")
-        except Exception:
-            return None

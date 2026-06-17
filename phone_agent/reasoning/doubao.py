@@ -12,7 +12,7 @@ from typing import Any
 
 from PIL import Image
 
-from ..core.action import ACTION_COMPLETE, Action, ActionOutput
+from ..core.action import ACTION_COMPLETE, ACTION_WAIT, Action, ActionOutput
 from ..perception.screen import encode_image_data_url
 from .base import StepRecord
 from .parser import ParseError, parse_model_output
@@ -27,10 +27,10 @@ DEFAULT_MODEL_ID = "doubao-seed-1-6-vision-250815"
 
 # Doubao thinking mode: 决定模型是否在内部做 VisualCoT 推理
 #   "disabled" - 不思考,响应快、便宜,但复杂场景准确率低
-#   "enabled"  - 总是思考,慢、贵,简单任务也会浪费
-#   "auto"     - 模型自己判断,产品默认值
+#   "enabled"  - 总是思考,慢、贵,但准确率高
+# 注意:doubao-seed-1-6-vision-250815 不支持 "auto",其他模型可能支持
 THINKING_MODES = {"disabled", "enabled", "auto"}
-DEFAULT_THINKING_MODE = "auto"
+DEFAULT_THINKING_MODE = "enabled"
 
 
 @dataclass
@@ -101,12 +101,14 @@ class DoubaoReasoner:
         try:
             action = parse_model_output(raw_output, screenshot.size)
         except ParseError as exc:
+            # 模型输出非法时不要假装任务完成。降级到 WAIT,让 runner 下一轮重新预测。
+            # 真正"完成"应该来自模型的明确 COMPLETE 输出。
             logger.warning("parse model output failed: %s", exc)
             return ActionOutput(
-                action=Action(type=ACTION_COMPLETE, parameters={}),
+                action=Action(type=ACTION_WAIT, parameters={}),
                 raw_output=raw_output,
                 screen_summary=summary.get("screen_summary", ""),
-                action_summary="模型输出无法解析,任务终止",
+                action_summary="模型输出无法解析,降级为等待后重试",
                 usage=usage,
             )
 

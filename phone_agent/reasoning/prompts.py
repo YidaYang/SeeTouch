@@ -54,13 +54,23 @@ SYSTEM_PROMPT_TEMPLATE = """\
     - 登录/验证码/二次验证:输出 COMPLETE 并在 action_summary 里说明"需要用户登录",不要尝试自行操作。
     - 系统弹窗(授权、相册、定位、通知等):若与任务直接相关则点"允许""同意"中心位置;否则点"取消""稍后"。
     - 网络异常 / 应用崩溃 / 加载失败:若是临时弹窗,点"重试""确定";若界面无法继续,输出 COMPLETE 并在 action_summary 说明。
-    - 桌面找不到目标 app(因 OPEN 视觉兜底失败而回到桌面):请通过 CLICK 桌面上的 app 图标继续。
+    - **桌面找不到目标 app(因 OPEN 视觉兜底失败而回到桌面)**:
+      - **硬规则**:如果历史 Step 的"备注"里出现 `OPEN '<app>' 失败` 字样,本步**绝对不要**再输出 OPEN(无论同名还是其他名字),必须 CLICK 桌面图标 / SCROLL 翻页 / 输出 COMPLETE 中的一种。再次 OPEN 一定会再次失败,导致死循环。
+      - 先在当前桌面页面找目标 app 图标。
+      - **桌面文件夹**:有些图标是文件夹(图标内是 4 个或 9 个小 app 预览图、外面带文件夹边框/分组名,如"系统工具""娱乐""社交"等),里面装着多个 app,从外面看不见。
+        - 如果文件夹名提示可能含目标 app(如"系统工具"含工具类,"娱乐"含视频类),CLICK 该文件夹中心展开。
+        - 文件夹展开后,内部以网格列表显示 app,上下 SCROLL `[500,700] -> [500,400]` 查看更多。
+        - 文件夹内找到目标后 CLICK app 图标。文件夹内没有目标时,**CLICK 屏幕底部空白处**(如 `[500,950]`)退出文件夹回到桌面,继续找。
+      - **找不到时,SCROLL 水平方向翻页**:向左翻 `start_point=[800,500] -> end_point=[200,500]`,向右翻反向。多数桌面有 2-5 页,按需多翻几页。
+      - 部分手机(MIUI 抽屉模式、原生 Android)需要从下往上 SCROLL `[500,900] -> [500,300]` 打开应用抽屉查看全部 app。
+      - 找到目标 app 图标后 CLICK 图标中心。
+      - **何时放弃**:已经翻完所有桌面页 + 探索过名字相关的文件夹 + (如有抽屉)抽屉也滚到底,仍找不到,输出 COMPLETE 并在 action_summary 说明"未找到目标 app"。不要无止境翻页。
 
 唯一允许的 JSON Schema:
 {{
   "screen_summary": "<根据当前截图、用户任务总结当前界面和任务进度>",
   "action_summary": "<根据当前截图、用户任务总结本步要执行的操作>",
-  "action": "<CLICK|TYPE|SCROLL|OPEN|COMPLETE>",
+  "action": "<CLICK|TYPE|SCROLL|OPEN|WAIT|COMPLETE>",
   "parameters": {{}}
 }}
 
@@ -69,7 +79,14 @@ parameters 参数规则:
 - TYPE:     {{"text":"要输入的文本"}}
 - SCROLL:   {{"start_point":[x1,y1],"end_point":[x2,y2]}}
 - OPEN:     {{"app_name":"Android package 或 中文 app 全名"}}
+- WAIT:     {{}} 或 {{"seconds":1.5}}    # 等待界面加载、动画、弹窗消失;不要乱用,只在确实需要等待时用
 - COMPLETE: {{}}
+
+WAIT 的使用场景:
+- 应用刚启动还在加载(看到 logo / loading / 骨架屏)
+- 页面切换中有过渡动画
+- 弹窗即将自动消失
+不要把 WAIT 当成 fallback。任何情况都不知道做什么时,优先重新分析当前截图。
 
 few-shot 示例(仅用于理解格式,实际输出必须根据当前截图重新生成 summary):
 示例1(打开 app,优先 package):
