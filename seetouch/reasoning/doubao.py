@@ -83,6 +83,9 @@ class DoubaoReasoner:
     ) -> ActionOutput:
         messages = self._build_messages(instruction, screenshot, history)
 
+        # 提取 prompt 文本(不含图片 base64),用于调试
+        prompt_text = self._extract_prompt_text(messages)
+
         try:
             response = self._call_api(messages)
             raw_output = self._extract_response_text(response)
@@ -94,6 +97,7 @@ class DoubaoReasoner:
                 raw_output=f"Error: {type(exc).__name__}: {exc}",
                 screen_summary="",
                 action_summary="API 调用失败,任务终止",
+                prompt_text=prompt_text,
             )
 
         summary = extract_summary_fields(raw_output)
@@ -110,6 +114,7 @@ class DoubaoReasoner:
                 screen_summary=summary.get("screen_summary", ""),
                 action_summary="模型输出无法解析,降级为等待后重试",
                 usage=usage,
+                prompt_text=prompt_text,
             )
 
         return ActionOutput(
@@ -118,6 +123,7 @@ class DoubaoReasoner:
             screen_summary=summary.get("screen_summary", ""),
             action_summary=summary.get("action_summary", ""),
             usage=usage,
+            prompt_text=prompt_text,
         )
 
     # ---------------------------- 内部 ----------------------------
@@ -190,3 +196,23 @@ class DoubaoReasoner:
             if reasoning:
                 out["reasoning_tokens"] = reasoning
         return out
+
+    def _extract_prompt_text(self, messages: list[dict[str, Any]]) -> str:
+        """从 messages 中提取纯文本部分,用于调试显示。
+
+        跳过 image_url 内容(base64 太长),只保留文本。
+        """
+        parts: list[str] = []
+        for msg in messages:
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                parts.append(content)
+            elif isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict):
+                        if item.get("type") == "text":
+                            parts.append(item.get("text", ""))
+                        elif item.get("type") == "image_url":
+                            parts.append("[截图]")
+        return "\n".join(parts)
+

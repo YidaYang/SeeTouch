@@ -1,4 +1,9 @@
-"""主循环 Runner:把 device / reasoner / guard / session 串成闭环。"""
+"""主循环 Runner:把 device / reasoner / guard / session 串成闭环。
+
+支持两种消费方式:
+  - run(task):连续执行直到任务结束(CLI 用)
+  - start(task) + 循环调 step():逐步执行(调试器用)
+"""
 
 from __future__ import annotations
 
@@ -18,7 +23,7 @@ from ..core.action import (
 from ..device.base import DeviceController, DeviceError, OpenAppNeedsVisual
 from ..reasoning.base import Reasoner
 from ..safety.guard import Guard
-from .session import RunResult, Session
+from .session import RunResult, Session, StepResult
 from .task import Task
 
 
@@ -35,6 +40,10 @@ class Runner:
         4. 执行动作(COMPLETE 直接结束)
         5. 记录到 Session
         6. 检查终止条件:任务完成 / 用户拒绝 / 连续失败 / 步数耗尽
+
+    支持两种使用模式:
+        - run(task):自动消费全部步骤,返回 RunResult
+        - start(task) + 循环 step():逐步执行,每步返回 StepResult
     """
 
     def __init__(
@@ -53,117 +62,230 @@ class Runner:
         self.max_consecutive_failures = max_consecutive_failures
         self.max_consecutive_identical_actions = max_consecutive_identical_actions
 
-    def run(self, task: Task) -> RunResult:
-        session = Session(task, base_dir=self.runs_dir)
+        # 运行状态(start() 初始化,step() 推进)
+        self._session: Session | None = None
+        self._task: Task | None = None
+        self._current_step: int = 0
+        self._finished: bool = True
+        self._pending_visual_request: str | None = None
+        self._visual_baseline_app: str | None = None
+
+    # ======================== 公开 API ========================
+
+    def start(self, task: Task) -> None:
+        """初始化一次任务执行。后续通过 step() 逐步推进。"""
+        self._task = task
+        self._session = Session(task, base_dir=self.runs_dir)
+        self._current_step = 0
+        self._finished = False
+        self._pending_visual_request = None
+        self._visual_baseline_app = None
         logger.info(
             "start task: id=%s instruction=%r runs_dir=%s",
-            task.task_id, task.instruction, session.dir,
+            task.task_id, task.instruction, self._session.dir,
         )
 
-        # 视觉兜底状态:被设备层 raise OpenAppNeedsVisual 后,记下原始请求和当前桌面 package。
-        # 下一步起每次执行后检测前台变化,首次切到非桌面 app 时回写 learned cache。
-        pending_visual_request: str | None = None
-        visual_baseline_app: str | None = None
+    def step(self) -> StepResult:
+        """执行单步:截图 → 推理 → 执行 → 记录 → 返回结果。
 
-        for step in range(1, task.max_steps + 1):
-            try:
-                screenshot = self.device.screenshot()
-            except Exception as exc:
-                logger.error("screenshot failed: %s", exc)
-                session.mark_aborted(f"screenshot_failed: {exc}")
-                break
+        调用方根据 StepResult.terminal 判断任务是否结束。
+        必须先调用 start() 再调用 step()。
 
-            screenshot_path = session.save_screenshot(step, screenshot)
+        Raises:
+            RuntimeError: 未调用 start() 或任务已结束时调用
+        """
+        if self._session is None or self._task is None:
+            raise RuntimeError("must call start() before step()")
+        if self._finished:
+            raise RuntimeError("task already finished, call start() to begin a new task")
 
-            out = self.reasoner.predict(task.instruction, screenshot, session.history)
-            logger.info(
-                "[step %d] action=%s params=%s",
-                step, out.action.type, out.action.parameters,
+        self._current_step += 1
+        step = self._current_step
+        task = self._task
+        session = self._session
+
+        # 1. 截屏
+        try:
+            screenshot = self.device.screenshot()
+        except Exception as exc:
+            logger.error("screenshot failed: %s", exc)
+            session.mark_aborted(f"screenshot_failed: {exc}")
+            self._finished = True
+            # 创建一个空白图片占位
+            from PIL import Image as _Image
+            screenshot = _Image.new("RGB", (1080, 1920), (0, 0, 0))
+            return StepResult(
+                step=step, screenshot=screenshot, screenshot_path=None,
+                prompt_text="", raw_output="", action=Action(type=ACTION_WAIT),
+                screen_summary="", action_summary=f"截图失败: {exc}",
+                execution_success=False, notes=[f"screenshot_failed: {exc}"],
+                usage=None, reasoning_time=0.0, execution_time=0.0,
+                terminal=True, terminal_reason=f"screenshot_failed: {exc}",
             )
 
-            # COMPLETE 不需要 guard,也不执行任何设备动作
-            if out.action.type == ACTION_COMPLETE:
-                session.record_step(step, out, execution_success=True, screenshot_path=screenshot_path)
-                session.mark_completed()
-                logger.info("task completed at step %d", step)
-                break
+        screenshot_path = session.save_screenshot(step, screenshot)
 
-            # 敏感动作拦截
-            if self.guard.needs_confirmation(task, out):
-                approved = self.guard.ask(out, screenshot_path=str(screenshot_path))
-                if not approved:
-                    session.record_step(
-                        step, out, execution_success=None,
-                        notes=["user_denied_sensitive_action"],
-                        screenshot_path=screenshot_path,
-                    )
-                    session.mark_aborted("user_denied")
-                    break
+        # 2. 推理
+        t0 = time.perf_counter()
+        out = self.reasoner.predict(task.instruction, screenshot, session.history)
+        reasoning_time = time.perf_counter() - t0
 
-            # 执行
-            notes: list[str] = []
-            success: bool | None
-            try:
-                self._execute(out.action)
-                success = True
-            except OpenAppNeedsVisual as exc:
-                notes.append(
-                    f"❗ OPEN '{exc.requested}' 失败:静态表/包名直通/别名都未命中,"
-                    f"系统已回桌面。本步绝对不要再 OPEN 同名 app,必须 CLICK 桌面图标"
-                    f"(找不到时 SCROLL 水平翻页或上滑打开应用抽屉)。"
-                )
-                # 设备已回桌面,下一步交给 Reasoner 视觉处理;不算失败
-                success = True
-                pending_visual_request = exc.requested
-                visual_baseline_app = self._safe_current_app()
-                logger.info(
-                    "visual fallback armed: request=%r baseline=%s",
-                    pending_visual_request, visual_baseline_app,
-                )
-            except DeviceError as exc:
-                logger.warning("device error at step %d: %s", step, exc)
-                notes.append(f"device_error: {exc}")
-                success = False
-            except Exception as exc:
-                logger.exception("unexpected error at step %d", step)
-                notes.append(f"unexpected_error: {type(exc).__name__}: {exc}")
-                success = False
+        logger.info(
+            "[step %d] action=%s params=%s (%.1fs)",
+            step, out.action.type, out.action.parameters, reasoning_time,
+        )
 
-            # 视觉兜底命中检测:每步执行后看前台是否切到了非桌面 app
-            if pending_visual_request and out.action.type != ACTION_OPEN:
-                current = self._safe_current_app()
-                if current and current != visual_baseline_app:
-                    try:
-                        self.device.learn_app_from_visual(pending_visual_request, current)
-                        notes.append(f"visual_fallback_learned: {pending_visual_request} -> {current}")
-                    except Exception as exc:
-                        logger.warning("learn_app_from_visual failed: %s", exc)
-                    pending_visual_request = None
-                    visual_baseline_app = None
-
+        # 3. COMPLETE 不需要 guard,也不执行任何设备动作
+        if out.action.type == ACTION_COMPLETE:
             session.record_step(
-                step, out,
-                execution_success=success,
-                notes=notes,
+                step, out, execution_success=True,
                 screenshot_path=screenshot_path,
+                reasoning_time=reasoning_time, execution_time=0.0,
+            )
+            session.mark_completed()
+            self._finished = True
+            logger.info("task completed at step %d", step)
+            return StepResult(
+                step=step, screenshot=screenshot, screenshot_path=screenshot_path,
+                prompt_text=out.prompt_text, raw_output=out.raw_output,
+                action=out.action, screen_summary=out.screen_summary,
+                action_summary=out.action_summary, execution_success=True,
+                notes=[], usage=out.usage,
+                reasoning_time=reasoning_time, execution_time=0.0,
+                terminal=True, terminal_reason="completed",
             )
 
-            if session.consecutive_failures() >= self.max_consecutive_failures:
-                logger.warning("too many consecutive failures, abort")
-                session.mark_aborted("consecutive_failures")
-                break
-
-            if session.consecutive_identical_actions() >= self.max_consecutive_identical_actions:
-                logger.warning(
-                    "stuck in loop: same action repeated %d times, abort",
-                    session.consecutive_identical_actions(),
+        # 4. 敏感动作拦截
+        if self.guard.needs_confirmation(task, out):
+            approved = self.guard.ask(out, screenshot_path=str(screenshot_path))
+            if not approved:
+                notes = ["user_denied_sensitive_action"]
+                session.record_step(
+                    step, out, execution_success=None, notes=notes,
+                    screenshot_path=screenshot_path,
+                    reasoning_time=reasoning_time, execution_time=0.0,
                 )
-                session.mark_aborted("stuck_loop")
-                break
-        else:
-            session.mark_aborted("max_steps_reached")
+                session.mark_aborted("user_denied")
+                self._finished = True
+                return StepResult(
+                    step=step, screenshot=screenshot, screenshot_path=screenshot_path,
+                    prompt_text=out.prompt_text, raw_output=out.raw_output,
+                    action=out.action, screen_summary=out.screen_summary,
+                    action_summary=out.action_summary, execution_success=None,
+                    notes=notes, usage=out.usage,
+                    reasoning_time=reasoning_time, execution_time=0.0,
+                    terminal=True, terminal_reason="user_denied",
+                )
 
-        return session.summarize()
+        # 5. 执行
+        notes: list[str] = []
+        success: bool | None
+        t1 = time.perf_counter()
+        try:
+            self._execute(out.action)
+            success = True
+        except OpenAppNeedsVisual as exc:
+            notes.append(
+                f"❗ OPEN '{exc.requested}' 失败:静态表/包名直通/别名都未命中,"
+                f"系统已回桌面。本步绝对不要再 OPEN 同名 app,必须 CLICK 桌面图标"
+                f"(找不到时 SCROLL 水平翻页或上滑打开应用抽屉)。"
+            )
+            success = True
+            self._pending_visual_request = exc.requested
+            self._visual_baseline_app = self._safe_current_app()
+            logger.info(
+                "visual fallback armed: request=%r baseline=%s",
+                self._pending_visual_request, self._visual_baseline_app,
+            )
+        except DeviceError as exc:
+            logger.warning("device error at step %d: %s", step, exc)
+            notes.append(f"device_error: {exc}")
+            success = False
+        except Exception as exc:
+            logger.exception("unexpected error at step %d", step)
+            notes.append(f"unexpected_error: {type(exc).__name__}: {exc}")
+            success = False
+        execution_time = time.perf_counter() - t1
+
+        # 6. 视觉兜底命中检测
+        if self._pending_visual_request and out.action.type != ACTION_OPEN:
+            current = self._safe_current_app()
+            if current and current != self._visual_baseline_app:
+                try:
+                    self.device.learn_app_from_visual(self._pending_visual_request, current)
+                    notes.append(f"visual_fallback_learned: {self._pending_visual_request} -> {current}")
+                except Exception as exc:
+                    logger.warning("learn_app_from_visual failed: %s", exc)
+                self._pending_visual_request = None
+                self._visual_baseline_app = None
+
+        # 7. 记录
+        session.record_step(
+            step, out, execution_success=success, notes=notes,
+            screenshot_path=screenshot_path,
+            reasoning_time=reasoning_time, execution_time=execution_time,
+        )
+
+        # 8. 检查终止条件
+        terminal = False
+        terminal_reason: str | None = None
+
+        if session.consecutive_failures() >= self.max_consecutive_failures:
+            logger.warning("too many consecutive failures, abort")
+            session.mark_aborted("consecutive_failures")
+            terminal = True
+            terminal_reason = "consecutive_failures"
+        elif session.consecutive_identical_actions() >= self.max_consecutive_identical_actions:
+            logger.warning(
+                "stuck in loop: same action repeated %d times, abort",
+                session.consecutive_identical_actions(),
+            )
+            session.mark_aborted("stuck_loop")
+            terminal = True
+            terminal_reason = "stuck_loop"
+        elif step >= task.max_steps:
+            session.mark_aborted("max_steps_reached")
+            terminal = True
+            terminal_reason = "max_steps_reached"
+
+        if terminal:
+            self._finished = True
+
+        return StepResult(
+            step=step, screenshot=screenshot, screenshot_path=screenshot_path,
+            prompt_text=out.prompt_text, raw_output=out.raw_output,
+            action=out.action, screen_summary=out.screen_summary,
+            action_summary=out.action_summary, execution_success=success,
+            notes=notes, usage=out.usage,
+            reasoning_time=reasoning_time, execution_time=execution_time,
+            terminal=terminal, terminal_reason=terminal_reason,
+        )
+
+    def run(self, task: Task) -> RunResult:
+        """连续执行直到任务结束。
+
+        等价于 start() + 循环调 step(),与重构前行为一致。
+        CLI 入口使用此方法。
+        """
+        self.start(task)
+        while not self._finished:
+            self.step()
+        return self._session.summarize()  # type: ignore[union-attr]
+
+    @property
+    def session(self) -> Session | None:
+        """当前 Session,供外部(如调试器)读取状态。"""
+        return self._session
+
+    @property
+    def is_finished(self) -> bool:
+        return self._finished
+
+    @property
+    def current_step(self) -> int:
+        return self._current_step
+
+    # ======================== 内部 ========================
 
     def _safe_current_app(self) -> str | None:
         try:
@@ -171,8 +293,6 @@ class Runner:
         except Exception as exc:
             logger.warning("device.current_app() failed: %s", exc)
             return None
-
-    # ---------------------- 动作分派 ----------------------
 
     def _execute(self, action: Action) -> None:
         if action.type == ACTION_CLICK:

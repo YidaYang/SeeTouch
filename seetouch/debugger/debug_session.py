@@ -1,0 +1,265 @@
+"""调试会话管理:Runner 生命周期 + 线程协调。
+
+DebugSession 在工作线程中执行 Runner.step()(涉及 device I/O 和 API 调用),
+SocketIO 事件在主线程中处理。用 threading.Event 做阻塞/唤醒控制。
+"""
+
+from __future__ import annotations
+
+import base64
+import io
+import logging
+import threading
+from dataclasses import dataclass, field
+from typing import Any, Literal
+
+from PIL import Image
+
+from ..core.runner import Runner
+from ..core.session import StepResult
+from ..core.task import Task
+
+
+logger = logging.getLogger(__name__)
+
+
+# 前端可消费的序列化步骤数据
+@dataclass
+class StepData:
+    """StepResult 的可序列化版本,用于 WebSocket 推送。"""
+
+    step: int
+    screenshot_b64: str
+    screenshot_path: str
+    prompt_text: str
+    raw_output: str
+    action_type: str
+    action_params: dict[str, Any]
+    screen_summary: str
+    action_summary: str
+    execution_success: bool | None
+    notes: list[str]
+    usage: dict[str, Any] | None
+    reasoning_time: float
+    execution_time: float
+    terminal: bool
+    terminal_reason: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "step": self.step,
+            "screenshot_b64": self.screenshot_b64,
+            "screenshot_path": self.screenshot_path,
+            "prompt_text": self.prompt_text,
+            "raw_output": self.raw_output,
+            "action_type": self.action_type,
+            "action_params": self.action_params,
+            "screen_summary": self.screen_summary,
+            "action_summary": self.action_summary,
+            "execution_success": self.execution_success,
+            "notes": self.notes,
+            "usage": self.usage,
+            "reasoning_time": round(self.reasoning_time, 2),
+            "execution_time": round(self.execution_time, 2),
+            "terminal": self.terminal,
+            "terminal_reason": self.terminal_reason,
+        }
+
+
+def _image_to_b64(img: Image.Image, max_width: int = 720) -> str:
+    """将 PIL Image 压缩编码为 base64 JPEG,用于前端显示。"""
+    # 缩小以节省传输带宽
+    if img.width > max_width:
+        ratio = max_width / img.width
+        new_size = (max_width, int(img.height * ratio))
+        img = img.resize(new_size, Image.LANCZOS)
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def step_result_to_data(result: StepResult) -> StepData:
+    """将 StepResult 转换为可序列化的 StepData。"""
+    return StepData(
+        step=result.step,
+        screenshot_b64=_image_to_b64(result.screenshot),
+        screenshot_path=str(result.screenshot_path) if result.screenshot_path else "",
+        prompt_text=result.prompt_text,
+        raw_output=result.raw_output,
+        action_type=result.action.type,
+        action_params=result.action.parameters,
+        screen_summary=result.screen_summary,
+        action_summary=result.action_summary,
+        execution_success=result.execution_success,
+        notes=result.notes,
+        usage=result.usage,
+        reasoning_time=result.reasoning_time,
+        execution_time=result.execution_time,
+        terminal=result.terminal,
+        terminal_reason=result.terminal_reason,
+    )
+
+
+SessionState = Literal["idle", "stepping", "running", "paused", "finished"]
+
+
+class DebugSession:
+    """管理一次调试会话。
+
+    线程模型:
+      - SocketIO 事件处理在主线程(Flask 线程)
+      - Runner.step() 在工作线程(_worker)执行
+      - 用 _step_event 和 _pause_event 做同步
+
+    状态转换:
+      idle -> stepping/running (start)
+      stepping -> idle (step 完成后等待下一个 step 指令)
+      running -> paused (pause) / finished (任务结束)
+      paused -> stepping/running (resume)
+      any -> idle (stop)
+    """
+
+    def __init__(self, runner: Runner):
+        self.runner = runner
+        self._state: SessionState = "idle"
+        self._step_history: list[StepData] = []
+
+        # 工作线程
+        self._worker_thread: threading.Thread | None = None
+
+        # 同步原语
+        self._step_event = threading.Event()   # 通知工作线程执行下一步
+        self._stop_event = threading.Event()   # 通知工作线程终止
+        self._lock = threading.Lock()
+
+        # 回调:由 app.py 设置,用于推送结果到前端
+        self.on_step_result: Any = None   # Callable[[StepData], None]
+        self.on_task_finished: Any = None  # Callable[[dict], None]
+        self.on_error: Any = None         # Callable[[str], None]
+
+    @property
+    def state(self) -> SessionState:
+        return self._state
+
+    @property
+    def step_history(self) -> list[StepData]:
+        return list(self._step_history)
+
+    def start_task(self, instruction: str, max_steps: int = 45) -> None:
+        """开始新任务,在工作线程中运行。"""
+        with self._lock:
+            if self._state not in ("idle", "finished"):
+                raise RuntimeError(f"cannot start: current state is {self._state}")
+
+            self._step_history.clear()
+            self._stop_event.clear()
+            self._step_event.clear()
+
+            task = Task(instruction=instruction, max_steps=max_steps)
+            self.runner.start(task)
+
+            self._state = "paused"  # 等待用户点 step 或 run
+            self._worker_thread = threading.Thread(
+                target=self._worker, daemon=True, name="debug-worker",
+            )
+            self._worker_thread.start()
+
+    def do_step(self) -> None:
+        """执行一步后暂停。"""
+        with self._lock:
+            if self._state not in ("paused",):
+                raise RuntimeError(f"cannot step: current state is {self._state}")
+            self._state = "stepping"
+        self._step_event.set()
+
+    def do_run(self) -> None:
+        """连续执行直到暂停或结束。"""
+        with self._lock:
+            if self._state not in ("paused",):
+                raise RuntimeError(f"cannot run: current state is {self._state}")
+            self._state = "running"
+        self._step_event.set()
+
+    def do_pause(self) -> None:
+        """暂停连续执行(当前步执行完后生效)。"""
+        with self._lock:
+            if self._state == "running":
+                self._state = "paused"
+
+    def do_stop(self) -> None:
+        """终止任务。"""
+        with self._lock:
+            self._stop_event.set()
+            self._step_event.set()  # 唤醒可能在等待的工作线程
+
+    def _worker(self) -> None:
+        """工作线程主循环。"""
+        try:
+            while True:
+                # 等待指令(step/run)
+                self._step_event.wait()
+                self._step_event.clear()
+
+                # 检查是否要停止
+                if self._stop_event.is_set():
+                    break
+
+                # 执行步骤循环
+                while True:
+                    if self._stop_event.is_set():
+                        break
+
+                    # 执行一步
+                    try:
+                        result = self.runner.step()
+                    except Exception as exc:
+                        logger.exception("runner.step() failed")
+                        if self.on_error:
+                            self.on_error(f"执行出错: {type(exc).__name__}: {exc}")
+                        with self._lock:
+                            self._state = "finished"
+                        return
+
+                    step_data = step_result_to_data(result)
+                    self._step_history.append(step_data)
+
+                    # 推送结果
+                    if self.on_step_result:
+                        self.on_step_result(step_data)
+
+                    # 任务结束
+                    if result.terminal:
+                        with self._lock:
+                            self._state = "finished"
+                        if self.on_task_finished:
+                            session = self.runner.session
+                            summary = session.summarize() if session else None
+                            self.on_task_finished({
+                                "completed": summary.completed if summary else False,
+                                "aborted_reason": summary.aborted_reason if summary else None,
+                                "total_steps": summary.total_steps if summary else 0,
+                                "total_input_tokens": summary.total_input_tokens if summary else 0,
+                                "total_output_tokens": summary.total_output_tokens if summary else 0,
+                                "runs_dir": summary.runs_dir if summary else "",
+                            })
+                        return
+
+                    # 单步模式:执行完一步后暂停
+                    with self._lock:
+                        if self._state == "stepping":
+                            self._state = "paused"
+                            break  # 回到外层 wait
+                        elif self._state == "paused":
+                            # do_pause() 被调用了
+                            break
+                        # running 状态继续循环
+
+        except Exception as exc:
+            logger.exception("debug worker unexpected error")
+            if self.on_error:
+                self.on_error(f"工作线程异常: {type(exc).__name__}: {exc}")
+        finally:
+            with self._lock:
+                if self._state not in ("finished",):
+                    self._state = "finished" if self.runner.is_finished else "idle"

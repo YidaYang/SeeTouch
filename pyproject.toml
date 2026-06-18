@@ -27,6 +27,10 @@ dev = [
 ui = [
     "rich>=13.0",
 ]
+debugger = [
+    "flask>=3.0",
+    "flask-socketio>=5.3",
+]
 
 [project.scripts]
 seetouch = "seetouch.cli.main:main"

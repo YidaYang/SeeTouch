@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SeeTouch Debugger</title>
+    <meta name="description" content="SeeTouch GUI Agent 图形化调试器 — 实时截图、prompt 查看、单步执行">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- 顶部状态栏 -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <h1 class="logo">
+                <span class="logo-icon">👁</span>
+                <span>SeeTouch</span>
+                <span class="logo-sub">Debugger</span>
+            </h1>
+        </div>
+        <div class="topbar-right">
+            <span class="connection-dot" id="connectionDot"></span>
+            <span class="connection-text" id="connectionText">未连接</span>
+            <span class="state-badge" id="stateBadge">idle</span>
+        </div>
+    </header>
+
+    <main class="main-layout">
+        <!-- 左侧:截图面板 -->
+        <section class="panel screenshot-panel">
+            <div class="panel-header">
+                <h2>📱 屏幕截图</h2>
+                <span class="step-indicator" id="stepIndicator">—</span>
+            </div>
+            <div class="screenshot-container" id="screenshotContainer">
+                <div class="screenshot-placeholder" id="screenshotPlaceholder">
+                    <div class="placeholder-icon">📱</div>
+                    <div class="placeholder-text">等待任务启动...</div>
+                </div>
+                <canvas id="screenshotCanvas" style="display:none;"></canvas>
+            </div>
+        </section>
+
+        <!-- 右侧:信息面板 -->
+        <section class="panel info-panel">
+            <div class="panel-header">
+                <h2>📋 步骤详情</h2>
+            </div>
+            <div class="info-content" id="infoContent">
+                <!-- 动作区域 -->
+                <div class="info-section">
+                    <div class="info-label">Action</div>
+                    <div class="action-display" id="actionDisplay">
+                        <span class="action-type" id="actionType">—</span>
+                        <span class="action-params" id="actionParams"></span>
+                    </div>
+                </div>
+
+                <!-- 执行结果 -->
+                <div class="info-section">
+                    <div class="info-label">执行结果</div>
+                    <div class="result-row">
+                        <span class="result-badge" id="resultBadge">—</span>
+                        <span class="action-summary" id="actionSummary"></span>
+                    </div>
+                </div>
+
+                <!-- Screen Summary -->
+                <div class="info-section">
+                    <div class="info-label">Screen Summary</div>
+                    <div class="summary-text" id="screenSummary">—</div>
+                </div>
+
+                <!-- Notes -->
+                <div class="info-section" id="notesSection" style="display:none;">
+                    <div class="info-label">Notes</div>
+                    <div class="notes-list" id="notesList"></div>
+                </div>
+
+                <!-- Prompt (折叠) -->
+                <div class="info-section collapsible">
+                    <div class="info-label collapsible-header" onclick="toggleSection('promptContent')">
+                        <span>▶ Prompt</span>
+                        <span class="collapse-hint">点击展开</span>
+                    </div>
+                    <div class="collapsible-content" id="promptContent">
+                        <pre class="code-block" id="promptText">—</pre>
+                    </div>
+                </div>
+
+                <!-- Model Output (折叠) -->
+                <div class="info-section collapsible">
+                    <div class="info-label collapsible-header" onclick="toggleSection('rawOutputContent')">
+                        <span>▶ Model Output</span>
+                        <span class="collapse-hint">点击展开</span>
+                    </div>
+                    <div class="collapsible-content" id="rawOutputContent">
+                        <pre class="code-block" id="rawOutputText">—</pre>
+                    </div>
+                </div>
+
+                <!-- Metrics -->
+                <div class="info-section">
+                    <div class="info-label">Metrics</div>
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <span class="metric-icon">⏱</span>
+                            <span class="metric-label">推理</span>
+                            <span class="metric-value" id="reasoningTime">—</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-icon">⚡</span>
+                            <span class="metric-label">执行</span>
+                            <span class="metric-value" id="executionTime">—</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-icon">📥</span>
+                            <span class="metric-label">Input</span>
+                            <span class="metric-value" id="tokensIn">—</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-icon">📤</span>
+                            <span class="metric-label">Output</span>
+                            <span class="metric-value" id="tokensOut">—</span>
+                        </div>
+                        <div class="metric-item" id="thinkingMetric" style="display:none;">
+                            <span class="metric-icon">🧠</span>
+                            <span class="metric-label">Thinking</span>
+                            <span class="metric-value" id="tokensThinking">—</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 底部控制栏 -->
+    <footer class="control-bar">
+        <div class="control-left">
+            <div class="input-group">
+                <input type="text" id="instructionInput" class="instruction-input"
+                    placeholder="输入任务指令,如:在哔哩哔哩搜索采莲曲" autocomplete="off">
+                <input type="number" id="maxStepsInput" class="max-steps-input"
+                    value="45" min="1" max="200" title="最大步数">
+            </div>
+            <div class="control-buttons">
+                <button id="btnStep" class="btn btn-step" title="单步执行">
+                    <span class="btn-icon">⏭</span> Step
+                </button>
+                <button id="btnRun" class="btn btn-run" title="连续执行">
+                    <span class="btn-icon">▶</span> Run
+                </button>
+                <button id="btnPause" class="btn btn-pause" title="暂停" disabled>
+                    <span class="btn-icon">⏸</span> Pause
+                </button>
+                <button id="btnStop" class="btn btn-stop" title="停止" disabled>
+                    <span class="btn-icon">⏹</span> Stop
+                </button>
+            </div>
+        </div>
+        <div class="control-right">
+            <div class="timeline-label">步骤时间线</div>
+            <div class="timeline" id="timeline"></div>
+        </div>
+    </footer>
+
+    <!-- Toast 通知 -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -76,6 +76,7 @@ class ActionOutput:
         screen_summary: 模型对当前截图的描述
         action_summary: 模型对本步动作的解释
         usage:          token 使用统计(可选)
+        prompt_text:    发给模型的 prompt 文本(不含图片),用于调试
     """
 
     action: Action
@@ -83,3 +84,5 @@ class ActionOutput:
     screen_summary: str = ""
     action_summary: str = ""
     usage: dict[str, Any] | None = None
+    prompt_text: str = ""
+

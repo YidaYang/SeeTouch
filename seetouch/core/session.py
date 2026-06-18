@@ -20,6 +20,30 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class StepResult:
+    """Runner 单步执行的完整可观测数据包。
+
+    CLI 和调试器都通过此数据类获取每步结果。
+    """
+
+    step: int
+    screenshot: Image.Image
+    screenshot_path: Path | None
+    prompt_text: str
+    raw_output: str
+    action: Action
+    screen_summary: str
+    action_summary: str
+    execution_success: bool | None
+    notes: list[str]
+    usage: dict[str, Any] | None
+    reasoning_time: float
+    execution_time: float
+    terminal: bool
+    terminal_reason: str | None = None
+
+
+@dataclass
 class RunResult:
     task_id: str
     instruction: str
@@ -70,6 +94,8 @@ class Session:
         execution_success: bool | None,
         notes: list[str] | None = None,
         screenshot_path: Path | None = None,
+        reasoning_time: float = 0.0,
+        execution_time: float = 0.0,
     ) -> StepRecord:
         notes = list(notes or [])
         record = StepRecord(
@@ -83,7 +109,12 @@ class Session:
         )
         self.history.append(record)
         self._accumulate_usage(action_out.usage)
-        self._append_trace(record, screenshot_path, action_out.usage)
+        self._append_trace(
+            record, screenshot_path, action_out.usage,
+            prompt_text=action_out.prompt_text,
+            reasoning_time=reasoning_time,
+            execution_time=execution_time,
+        )
         return record
 
     # ----------------------- 状态 -----------------------
@@ -118,6 +149,16 @@ class Session:
 
     def mark_aborted(self, reason: str) -> None:
         self._aborted_reason = reason
+
+    @property
+    def is_finished(self) -> bool:
+        return self._completed or self._aborted_reason is not None
+
+    @property
+    def terminal_reason(self) -> str | None:
+        if self._completed:
+            return "completed"
+        return self._aborted_reason
 
     def summarize(self) -> RunResult:
         result = RunResult(
@@ -154,6 +195,9 @@ class Session:
         record: StepRecord,
         screenshot_path: Path | None,
         usage: dict[str, Any] | None,
+        prompt_text: str = "",
+        reasoning_time: float = 0.0,
+        execution_time: float = 0.0,
     ) -> None:
         line: dict[str, Any] = {
             "step": record.step,
@@ -165,6 +209,9 @@ class Session:
             "notes": record.notes,
             "screenshot": str(screenshot_path) if screenshot_path else None,
             "usage": usage,
+            "prompt_text": prompt_text,
+            "reasoning_time": reasoning_time,
+            "execution_time": execution_time,
         }
         try:
             with self.trace_path.open("a", encoding="utf-8") as f:

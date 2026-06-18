@@ -106,6 +106,35 @@ metadata:
 
 ---
 
+### 2026-06-19：正式开源发布到 GitHub
+
+- **仓库地址**: https://github.com/YidaYang/SeeTouch
+- **开源协议**: Apache License 2.0（由 GitHub 自动生成）
+- **发布流程**: rebase 合并 GitHub 生成的 LICENSE commit → push
+- **项目介绍**: Vision-driven mobile GUI agent that sees your screen and operates your phone via natural language.
+
+---
+
+### 2026-06-19：图形化调试器
+
+- **动机**: 之前只能命令行运行 + 看 log 调试，不直观且不支持单步执行
+- **架构变更**:
+  - Runner 从紧耦合 for 循环重构为 `start()` / `step()` / `run()` 状态机
+  - `run()` 变成 `start() + 循环 step()` 的语法糖，CLI 行为完全不变
+  - ActionOutput 新增 `prompt_text` 字段（模型输入与输出对称）
+  - 新增 `StepResult` 数据类，每步产出完整可观测数据
+  - Session trace 扩展写入 prompt_text / reasoning_time / execution_time
+- **调试器模块**: `seetouch/debugger/`
+  - 后端: Flask + Flask-SocketIO（WebSocket 实时推送）
+  - 前端: 原生 HTML/CSS/JS 暗色主题 Web UI
+  - 截图 Canvas 标注: CLICK 画红点+十字准星、SCROLL 画虚线箭头
+  - 控制: Step（单步）/ Run（连续）/ Pause / Stop
+  - 时间线: 可点击回看任意历史步骤
+  - Prompt / Model Output 可折叠查看
+- **启动方式**: `python -m seetouch debug [--port 5000]`
+- **依赖**: `pip install seetouch[debugger]`（flask + flask-socketio）
+- **验证**: 42 个现有测试全部通过，0 回归
+
 ## 重大 bug 复盘
 
 ### 首次真机死循环（2026-05-20）

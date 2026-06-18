@@ -4,6 +4,8 @@
     python -m seetouch run "<指令>"
     python -m seetouch run "<指令>" --serial <设备serial>
     python -m seetouch run "<指令>" --max-steps 30
+    python -m seetouch debug
+    python -m seetouch debug --port 8080
 """
 
 from __future__ import annotations
@@ -34,6 +36,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "run":
         return _cmd_run(args, settings)
+    elif args.command == "debug":
+        return _cmd_debug(args, settings)
 
     parser.print_help()
     return 2
@@ -48,6 +52,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--serial", default=None, help="Android 设备 serial(多设备时使用)")
     p_run.add_argument("--max-steps", type=int, default=None, help="单任务最大步数(默认 45)")
     p_run.add_argument("--runs-dir", default=None, help="运行产物输出目录(默认 ./runs)")
+
+    p_debug = sub.add_parser("debug", help="启动图形化调试器")
+    p_debug.add_argument("--port", type=int, default=5000, help="调试器服务端口(默认 5000)")
 
     return parser
 
@@ -90,6 +97,21 @@ def _cmd_run(args: argparse.Namespace, settings: AppSettings) -> int:
     print(f"tokens (in/out): {result.total_input_tokens}/{result.total_output_tokens}")
     print(f"runs_dir:       {result.runs_dir}")
     return 0 if result.completed else 1
+
+
+def _cmd_debug(args: argparse.Namespace, settings: AppSettings) -> int:
+    try:
+        from ..debugger.app import run_server
+    except ImportError as exc:
+        print(
+            f"[ERROR] 调试器依赖未安装: {exc}\n"
+            f"请运行: pip install seetouch[debugger]",
+            file=sys.stderr,
+        )
+        return 1
+
+    run_server(port=args.port, settings=settings)
+    return 0
 
 
 if __name__ == "__main__":

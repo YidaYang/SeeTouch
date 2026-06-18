@@ -117,6 +117,26 @@ python -m seetouch run "打开抖音"
 - 敏感操作（支付、下单、发送消息）会暂停请求确认
 - 结果保存到 `./runs/<timestamp>/` 目录
 
+### 调试器
+
+图形化调试器支持实时截图显示、单步执行、prompt/模型输出查看：
+
+```bash
+# 安装调试器依赖
+pip install -e ".[debugger]"
+
+# 启动调试器（浏览器自动打开）
+python -m seetouch debug
+python -m seetouch debug --port 8080   # 指定端口
+```
+
+调试器功能：
+- 📱 **实时截图** — CLICK 标注红点+十字准星，SCROLL 标注轨迹箭头
+- 📝 **完整信息** — Action、Screen Summary、Prompt（可折叠）、Model Output（可折叠）、Token 用量
+- ⏭ **单步执行** — 逐步观察每一步的截图、推理、动作
+- ▶ **连续运行** — 自动执行，支持随时暂停
+- 🕐 **历史回看** — 底部时间线可点击查看任意历史步骤
+
 ---
 
 ## 架构设计
@@ -127,9 +147,9 @@ python -m seetouch run "打开抖音"
 seetouch/
 ├── core/           # 主循环、Action、Task、Session
 │   ├── action.py   # 动作协议（CLICK/TYPE/SCROLL/OPEN/WAIT/COMPLETE）
-│   ├── runner.py   # 执行循环（截图→推理→执行→记录）
+│   ├── runner.py   # 状态机执行器（start/step/run）
 │   ├── task.py     # 任务定义
-│   └── session.py  # 会话管理
+│   └── session.py  # 会话管理 + StepResult 数据类
 ├── device/         # 设备控制层
 │   ├── base.py     # DeviceController 抽象接口
 │   └── android/    # uiautomator2 实现
@@ -142,6 +162,10 @@ seetouch/
 │   └── prompts/    # Prompt 模板
 ├── safety/         # 安全防护
 │   └── guard.py    # 敏感动作识别
+├── debugger/       # 图形化调试器
+│   ├── app.py      # Flask + SocketIO 服务
+│   ├── debug_session.py  # 调试会话管理
+│   └── static/     # Web UI（HTML/CSS/JS）
 ├── cli/            # 命令行入口
 └── scripts/        # 工具脚本
     └── doctor.py   # 环境诊断
@@ -241,12 +265,11 @@ ruff format seetouch/
 - [x] 敏感动作拦截
 - [x] 死循环检测（连续 3 步相同动作自动中止）
 - [x] 真机闭环验证（Xiaomi / MIUI）
+- [x] 图形化调试器（Web UI + 单步执行 + 实时截图标注）
 
 ### 进行中 🚧
 - [ ] 更多 VLM 后端支持（Claude、GPT-4V、本地模型）
-- [ ] 任务回放与调试工具
 - [ ] 多设备并行执行
-- [ ] Web GUI 控制面板
 
 ### 未来计划 💡
 - [ ] **on-device Android APP** — 独立运行在手机上，不依赖 PC
