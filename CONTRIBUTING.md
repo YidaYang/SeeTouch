@@ -8,7 +8,7 @@
 
 ### 报告 Bug
 
-在 [GitHub Issues](https://github.com/your-username/seetouch/issues) 提交 Bug 报告时，请包含：
+在 [GitHub Issues](https://github.com/YidaYang/seetouch/issues) 提交 Bug 报告时，请包含：
 
 - **环境信息**：Python 版本、操作系统、手机型号/Android 版本
 - **复现步骤**：详细的操作流程
@@ -30,7 +30,7 @@
 
 2. **克隆到本地**
    ```bash
-   git clone https://github.com/your-username/seetouch.git
+   git clone https://github.com/YidaYang/seetouch.git
    cd seetouch
    ```
 
@@ -208,8 +208,8 @@ python -m seetouch run "你的测试指令"
 
 遇到问题？
 
-- **Discussions**: [GitHub Discussions](https://github.com/your-username/seetouch/discussions) — 技术讨论、使用交流
-- **Issues**: [GitHub Issues](https://github.com/your-username/seetouch/issues) — Bug 报告、功能请求
+- **Discussions**: [GitHub Discussions](https://github.com/YidaYang/seetouch/discussions) — 技术讨论、使用交流
+- **Issues**: [GitHub Issues](https://github.com/YidaYang/seetouch/issues) — Bug 报告、功能请求
 
 ---
 

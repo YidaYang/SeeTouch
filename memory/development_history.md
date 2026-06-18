@@ -7,7 +7,7 @@ metadata:
 
 # 开发历程
 
-更新时间：2026-06-17
+更新时间：2026-06-19
 
 ---
 
@@ -87,6 +87,22 @@ metadata:
 - **默认分支**: `main`
 - **保留历史**: 3 个产品相关 commit（ccce867 / 73a9e41 / dde04ba）
 - **目录结构**: `seetouch/` 提到根目录
+
+---
+
+### 2026-06-19：全局重命名 Phone Agent → SeeTouch
+
+- **commit**: `e7e8cbe` (46 文件 / 99 行改动)
+- **动机**: 项目准备开源到 GitHub，需要一个有辨识度的名字
+- **命名由来**: "See" + "Touch" — 先**看**屏幕（视觉理解），再**触**控操作。一个词点明产品基于纯视觉（截图 + VLM），而非无障碍树（Accessibility Tree）的技术路线
+- **变更范围**:
+  - Python 包: `phone_agent` → `seetouch`
+  - 品牌名: `Phone Agent` → `SeeTouch`
+  - 环境变量: `PHONE_AGENT_*` → `SEETOUCH_*`
+  - 用户目录: `~/.phone_agent/` → `~/.seetouch/`
+  - CLI 命令: `phone-agent` → `seetouch`
+  - pyproject.toml、README、CONTRIBUTING、LICENSE、memory 全量同步
+- **验证**: 42 个单元测试全部通过，零残留
 
 ---
 

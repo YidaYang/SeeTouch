@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**通过自然语言控制 Android 手机的 Vision-Driven GUI Agent**
+**Vision-driven mobile GUI agent that sees your screen and operates your phone via natural language.**
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -48,7 +48,7 @@ python -m seetouch run "打开抖音我的喜欢里搜索跳舞的视频"
 ### 安装
 
 ```bash
-git clone https://github.com/your-username/seetouch.git
+git clone https://github.com/YidaYang/seetouch.git
 cd seetouch
 python -m venv .venv
 
@@ -286,8 +286,8 @@ ruff format seetouch/
 
 ## 联系方式
 
-- **Issues**: [GitHub Issues](https://github.com/your-username/seetouch/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-username/seetouch/discussions)
+- **Issues**: [GitHub Issues](https://github.com/YidaYang/seetouch/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/YidaYang/seetouch/discussions)
 
 ---
 

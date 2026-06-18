@@ -7,7 +7,7 @@ metadata:
 
 # SeeTouch 产品概览
 
-更新时间：2026-06-17
+更新时间：2026-06-19
 
 ---
 
@@ -134,6 +134,7 @@ metadata:
 | 2026-05-21 | 启用 Doubao thinking，默认 auto 模式 | 73a9e41 |
 | 2026-06-01 | WAIT 协议 + 移除 fuzzy 匹配 + 视觉兜底增强 | dde04ba |
 | 2026-06-17 | 提取为独立仓库，main 分支 | - |
+| 2026-06-19 | 全局重命名 Phone Agent → SeeTouch，准备开源 | e7e8cbe |
 
 ---
 

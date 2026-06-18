@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "seetouch"
 version = "0.1.0"
-description = "SeeTouch: Vision-Driven GUI Agent for Android"
+description = "Vision-driven mobile GUI agent that sees your screen and operates your phone via natural language."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Proprietary" }
