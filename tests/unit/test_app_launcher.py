@@ -10,11 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from phone_agent.device.android.app_launcher import (
+from seetouch.device.android.app_launcher import (
     AppLauncher,
     is_package_like,
 )
-from phone_agent.device.base import OpenAppNeedsVisual
+from seetouch.device.base import OpenAppNeedsVisual
 
 
 def test_is_package_like_positive():
@@ -36,7 +36,7 @@ def launched(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     import importlib
 
-    from phone_agent.device.android import app_launcher
+    from seetouch.device.android import app_launcher
     importlib.reload(app_launcher)
 
     started: list[str] = []

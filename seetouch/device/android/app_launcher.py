@@ -15,7 +15,7 @@
   原因:L1/L2 已经有静态权威映射,不需要学;视觉兜底学到的才是真正"模型 + 用户"
   共同验证过的新映射。
 
-成功后由 Runner 通过 learn_from_visual() 写入 ~/.phone_agent/learned_apps.json。
+成功后由 Runner 通过 learn_from_visual() 写入 ~/.seetouch/learned_apps.json。
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 # 学习缓存路径
-LEARNED_CACHE_PATH = Path.home() / ".phone_agent" / "learned_apps.json"
+LEARNED_CACHE_PATH = Path.home() / ".seetouch" / "learned_apps.json"
 
 # package name 检测正则:至少两段,字符限制为 ASCII 字母数字下划线
 _PACKAGE_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)+$")

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from phone_agent.core.action import (
+from seetouch.core.action import (
     ACTION_CLICK,
     ACTION_COMPLETE,
     ACTION_OPEN,
@@ -16,10 +16,10 @@ from phone_agent.core.action import (
     Action,
     ActionOutput,
 )
-from phone_agent.core.runner import Runner
-from phone_agent.core.task import Task
-from phone_agent.device.base import OpenAppNeedsVisual
-from phone_agent.safety.guard import Guard
+from seetouch.core.runner import Runner
+from seetouch.core.task import Task
+from seetouch.device.base import OpenAppNeedsVisual
+from seetouch.safety.guard import Guard
 
 
 class MockDevice:

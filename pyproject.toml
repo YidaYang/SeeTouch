@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "phone-agent"
+name = "seetouch"
 version = "0.1.0"
-description = "Android GUI Agent: 自然语言指令 -> 真机自动化操作"
+description = "SeeTouch: Vision-Driven GUI Agent for Android"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Proprietary" }
@@ -29,11 +29,11 @@ ui = [
 ]
 
 [project.scripts]
-phone-agent = "phone_agent.cli.main:main"
+seetouch = "seetouch.cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["phone_agent*"]
+include = ["seetouch*"]
 exclude = ["tests*", "scripts*", "runs*"]
 
 [tool.pytest.ini_options]

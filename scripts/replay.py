@@ -1,7 +1,7 @@
 """回放某次 session:读 trace.jsonl 打印每一步。
 
 用法:
-    python phone_agent/scripts/replay.py runs/<task_id>
+    python seetouch/scripts/replay.py runs/<task_id>
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ def replay(session_dir: Path) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="回放 phone-agent session")
+    parser = argparse.ArgumentParser(description="回放 seetouch session")
     parser.add_argument("session_dir", help="runs/<task_id> 目录路径")
     args = parser.parse_args()
     return replay(Path(args.session_dir))

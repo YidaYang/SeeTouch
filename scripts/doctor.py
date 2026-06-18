@@ -1,9 +1,9 @@
 """环境自检:检查 adb / 设备 / uiautomator2 / VLM API key 是否到位。
 
 用法:
-    python -m phone_agent.scripts.doctor
+    python -m seetouch.scripts.doctor
 或者:
-    python phone_agent/scripts/doctor.py
+    python seetouch/scripts/doctor.py
 """
 
 from __future__ import annotations
@@ -95,7 +95,7 @@ def check_api_key() -> bool:
 
 def check_runs_dir() -> bool:
     print("\n[4/4] 检查产物目录")
-    runs_dir = Path(os.environ.get("PHONE_AGENT_RUNS_DIR", "runs"))
+    runs_dir = Path(os.environ.get("SEETOUCH_RUNS_DIR", "runs"))
     try:
         runs_dir.mkdir(parents=True, exist_ok=True)
     except Exception as exc:
@@ -113,7 +113,7 @@ def main() -> int:
     except ImportError:
         pass
 
-    print("Phone Agent 环境自检")
+    print("SeeTouch 环境自检")
     print("=" * 50)
 
     results = [
@@ -125,7 +125,7 @@ def main() -> int:
 
     print("\n" + "=" * 50)
     if all(results):
-        print("所有检查通过,可以运行: python -m phone_agent run \"<你的任务>\"")
+        print("所有检查通过,可以运行: python -m seetouch run \"<你的任务>\"")
         return 0
     print("有检查未通过,请按上面提示修复后重试")
     return 1

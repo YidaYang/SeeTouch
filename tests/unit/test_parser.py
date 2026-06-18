@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from phone_agent.core.action import (
+from seetouch.core.action import (
     ACTION_CLICK,
     ACTION_COMPLETE,
     ACTION_OPEN,
     ACTION_SCROLL,
     ACTION_TYPE,
 )
-from phone_agent.reasoning.parser import ParseError, parse_model_output
+from seetouch.reasoning.parser import ParseError, parse_model_output
 
 
 SCREEN = (1080, 2400)

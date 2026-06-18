@@ -1,4 +1,4 @@
-"""支持 `python -m phone_agent run ...`。"""
+"""支持 `python -m seetouch run ...`。"""
 
 from .cli.main import main
 

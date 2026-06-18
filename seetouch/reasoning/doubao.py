@@ -60,7 +60,7 @@ class DoubaoConfig:
             api_key=api_key,
             api_url=os.environ.get("DOUBAO_API_URL", DEFAULT_API_URL),
             model_id=os.environ.get("DOUBAO_MODEL_ID", DEFAULT_MODEL_ID),
-            thinking_mode=os.environ.get("PHONE_AGENT_THINKING_MODE", DEFAULT_THINKING_MODE),
+            thinking_mode=os.environ.get("SEETOUCH_THINKING_MODE", DEFAULT_THINKING_MODE),
         )
 
 

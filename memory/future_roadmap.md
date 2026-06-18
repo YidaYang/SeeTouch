@@ -34,14 +34,14 @@ metadata:
 **实现路径（分阶段）：**
 
 #### Stage 1：helper APK 验证（优先）
-- 创建 `android/` Gradle 工程（与 phone_agent 平级）
-- `applicationId=com.phoneagent.app`，minSdk26 / target34，零三方依赖
+- 创建 `android/` Gradle 工程（与 seetouch 平级）
+- `applicationId=com.seetouch.app`，minSdk26 / target34，零三方依赖
 - exported Activity（无 LAUNCHER filter、透明主题、后台线程查询）
 - 输出 `getExternalFilesDir/applist.json`（tmp → rename + `.done` 标记）
 - PC 端 `adb pull`；fallback = JSON 分块打到 logcat tag `PA_APPLIST`
 - 手动验证：抖音 / 哔哩哔哩等中文名 + 包名正确
 
-#### Stage 2：phone_agent 集成
+#### Stage 2：seetouch 集成
 - 新增 `device/android/app_index.py`：`AppIndex` 类
 - 集成 helper APK：启动 Activity → 轮询 `.done` / pull / parse → 缓存
 - `AppLauncher` 新增 L0.5 层：learned cache 和 L1 静态表之间插入 AppIndex 查询
@@ -50,7 +50,7 @@ metadata:
 #### Stage 3：最终迁移（on-device APP 时）
 - helper APK 逻辑直接长进主 App（Kotlin Service / Helper 类）
 - AppIndex 改为直接调用 PackageManager API，不再走 ADB
-- 持久化：`~/.phone_agent/learned_apps.json` → App 内部存储
+- 持久化：`~/.seetouch/learned_apps.json` → App 内部存储
 
 **构建环境要求：**
 - 本机仅 JDK 17，无 Android SDK / Gradle / Studio
@@ -123,7 +123,7 @@ metadata:
 - 常用账号（支付宝 / 微信切换）
 - 操作习惯（跳过广告 vs 看完广告）
 
-**实现：** `~/.phone_agent/preferences.json`
+**实现：** `~/.seetouch/preferences.json`
 
 ---
 

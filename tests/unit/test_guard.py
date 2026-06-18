@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from phone_agent.core.action import (
+from seetouch.core.action import (
     ACTION_CLICK,
     ACTION_COMPLETE,
     ACTION_OPEN,
     Action,
     ActionOutput,
 )
-from phone_agent.core.task import Task
-from phone_agent.safety.guard import (
+from seetouch.core.task import Task
+from seetouch.safety.guard import (
     Guard,
     action_is_sensitive,
     task_is_sensitive,

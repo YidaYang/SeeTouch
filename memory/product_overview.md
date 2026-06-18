@@ -1,11 +1,11 @@
 ---
 name: product-overview
-description: Phone Agent 产品定位、技术架构、核心能力概览
+description: SeeTouch 产品定位、技术架构、核心能力概览
 metadata:
   type: project
 ---
 
-# Phone Agent 产品概览
+# SeeTouch 产品概览
 
 更新时间：2026-06-17
 
@@ -13,7 +13,7 @@ metadata:
 
 ## 产品定位
 
-**Phone Agent 是一个 Android 真机 GUI Agent 产品**，通过 Vision-Language Model 理解屏幕内容，将自然语言指令转换为手机操作序列。
+**SeeTouch 是一个 Android 真机 GUI Agent 产品**，通过 Vision-Language Model 理解屏幕内容，将自然语言指令转换为手机操作序列。
 
 **核心价值：**
 - 自然语言控制手机，无需学习复杂操作流程
@@ -78,7 +78,7 @@ metadata:
 - 用户确认机制（敏感动作前暂停等待人工批准）
 
 ### cli/
-- 命令行入口：`python -m phone_agent run "指令"`
+- 命令行入口：`python -m seetouch run "指令"`
 - 配置加载（环境变量 + `.env` 文件）
 
 ---
@@ -92,7 +92,7 @@ metadata:
 
 ### 2. OPEN 启动策略（五级 fallback）
 ```
-① learned cache   — 视觉兜底学到的映射（持久化到 ~/.phone_agent/learned_apps.json）
+① learned cache   — 视觉兜底学到的映射（持久化到 ~/.seetouch/learned_apps.json）
 ② L1 静态表       — 高频中文名 → package（17 个国民应用）
 ③ L1' alias       — 海外/旧版 package → 国内替代（TikTok → 抖音等）
 ④ L2 直通         — 输入本身是 package 格式且已安装

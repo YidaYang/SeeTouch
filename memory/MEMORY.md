@@ -1,4 +1,4 @@
-# Phone Agent 项目记忆索引
+# SeeTouch 项目记忆索引
 
 本项目是 Android 真机 GUI Agent 产品，通过 Vision-Language Model + uiautomator2 实现自然语言控制手机操作。
 

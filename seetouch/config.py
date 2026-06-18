@@ -36,8 +36,8 @@ class AppSettings:
     @classmethod
     def from_env(cls) -> "AppSettings":
         return cls(
-            device_serial=(os.environ.get("PHONE_AGENT_DEVICE_SERIAL") or None),
-            runs_dir=Path(os.environ.get("PHONE_AGENT_RUNS_DIR", "runs")),
-            max_steps=int(os.environ.get("PHONE_AGENT_MAX_STEPS", "45")),
-            log_level=os.environ.get("PHONE_AGENT_LOG_LEVEL", "INFO"),
+            device_serial=(os.environ.get("SEETOUCH_DEVICE_SERIAL") or None),
+            runs_dir=Path(os.environ.get("SEETOUCH_RUNS_DIR", "runs")),
+            max_steps=int(os.environ.get("SEETOUCH_MAX_STEPS", "45")),
+            log_level=os.environ.get("SEETOUCH_LOG_LEVEL", "INFO"),
         )

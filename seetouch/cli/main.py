@@ -1,9 +1,9 @@
 """命令行入口。
 
 用法:
-    python -m phone_agent run "<指令>"
-    python -m phone_agent run "<指令>" --serial <设备serial>
-    python -m phone_agent run "<指令>" --max-steps 30
+    python -m seetouch run "<指令>"
+    python -m seetouch run "<指令>" --serial <设备serial>
+    python -m seetouch run "<指令>" --max-steps 30
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="phone-agent", description="Android GUI Agent")
+    parser = argparse.ArgumentParser(prog="seetouch", description="Android GUI Agent")
     sub = parser.add_subparsers(dest="command")
 
     p_run = sub.add_parser("run", help="执行一条自然语言任务")

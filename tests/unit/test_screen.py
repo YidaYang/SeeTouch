@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from phone_agent.perception.screen import norm_to_pixel, pixel_to_norm
+from seetouch.perception.screen import norm_to_pixel, pixel_to_norm
 
 
 SCREEN = (1080, 2400)

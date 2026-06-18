@@ -19,7 +19,7 @@ metadata:
 
 **Why：** 比赛 BaseAgent 有签名验证、强制 disabled thinking、固定 model 等约束，对产品是束缚；比赛文件提交时会被替换，共享代码反而是隐患。
 
-**结果：** 从零构建 `phone_agent/` 产品包，与比赛代码完全独立，互不 import。
+**结果：** 从零构建 `seetouch/` 产品包，与比赛代码完全独立，互不 import。
 
 ---
 
@@ -63,7 +63,7 @@ metadata:
 
 - **commit**: `73a9e41`
 - **默认**: `auto` 模式（模型按需 VisualCoT）
-- **配置**: `PHONE_AGENT_THINKING_MODE` 环境变量
+- **配置**: `SEETOUCH_THINKING_MODE` 环境变量
 - **成本监控**: `_extract_usage` 带 `reasoning_tokens`
 
 ---
@@ -86,7 +86,7 @@ metadata:
 - **仓库路径**: `D:\科研\phone-agent`
 - **默认分支**: `main`
 - **保留历史**: 3 个产品相关 commit（ccce867 / 73a9e41 / dde04ba）
-- **目录结构**: `phone_agent/` 提到根目录
+- **目录结构**: `seetouch/` 提到根目录
 
 ---
 

@@ -10,11 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from phone_agent.device.android.app_launcher import (
+from seetouch.device.android.app_launcher import (
     AppLauncher,
     is_package_like,
 )
-from phone_agent.device.base import OpenAppNeedsVisual
+from seetouch.device.base import OpenAppNeedsVisual
 
 
 # ---------- 纯函数测试 ----------
@@ -41,7 +41,7 @@ def launched(tmp_path, monkeypatch):
     # 重新导入以重置 module-level LEARNED_CACHE_PATH
     import importlib
 
-    from phone_agent.device.android import app_launcher
+    from seetouch.device.android import app_launcher
     importlib.reload(app_launcher)
 
     started: list[str] = []

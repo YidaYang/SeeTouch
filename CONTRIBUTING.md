@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢你考虑为 Phone Agent 贡献代码！
+感谢你考虑为 SeeTouch 贡献代码！
 
 ---
 
@@ -8,7 +8,7 @@
 
 ### 报告 Bug
 
-在 [GitHub Issues](https://github.com/your-username/phone-agent/issues) 提交 Bug 报告时，请包含：
+在 [GitHub Issues](https://github.com/your-username/seetouch/issues) 提交 Bug 报告时，请包含：
 
 - **环境信息**：Python 版本、操作系统、手机型号/Android 版本
 - **复现步骤**：详细的操作流程
@@ -30,8 +30,8 @@
 
 2. **克隆到本地**
    ```bash
-   git clone https://github.com/your-username/phone-agent.git
-   cd phone-agent
+   git clone https://github.com/your-username/seetouch.git
+   cd seetouch
    ```
 
 3. **创建分支**  
@@ -57,14 +57,14 @@
 6. **运行测试**
    ```bash
    # 代码检查
-   ruff check phone_agent/
-   ruff format phone_agent/
+   ruff check seetouch/
+   ruff format seetouch/
 
    # 单元测试
    pytest tests/ -v
 
    # 覆盖率
-   pytest --cov=phone_agent --cov-report=term-missing
+   pytest --cov=seetouch --cov-report=term-missing
    ```
 
 7. **提交更改**  
@@ -136,7 +136,7 @@ def normalize_point(x: int, y: int, width: int, height: int) -> tuple[int, int]:
 示例：
 ```python
 import pytest
-from phone_agent.core.action import Action, parse_action
+from seetouch.core.action import Action, parse_action
 
 def test_parse_click_action():
     result = parse_action('{"action": "CLICK", "parameters": {"point": [500, 300]}}')
@@ -160,7 +160,7 @@ def test_parse_invalid_action_fallback_to_wait():
 
 新增 VLM 后端示例：
 ```python
-# phone_agent/reasoning/claude.py
+# seetouch/reasoning/claude.py
 from .base import Reasoner, ReasoningResult
 
 class ClaudeReasoner(Reasoner):
@@ -176,7 +176,7 @@ class ClaudeReasoner(Reasoner):
 提交涉及设备控制或推理逻辑的 PR 时，建议提供真机验证结果：
 
 ```bash
-python -m phone_agent run "你的测试指令"
+python -m seetouch run "你的测试指令"
 ```
 
 在 PR 描述中附上：
@@ -208,8 +208,8 @@ python -m phone_agent run "你的测试指令"
 
 遇到问题？
 
-- **Discussions**: [GitHub Discussions](https://github.com/your-username/phone-agent/discussions) — 技术讨论、使用交流
-- **Issues**: [GitHub Issues](https://github.com/your-username/phone-agent/issues) — Bug 报告、功能请求
+- **Discussions**: [GitHub Discussions](https://github.com/your-username/seetouch/discussions) — 技术讨论、使用交流
+- **Issues**: [GitHub Issues](https://github.com/your-username/seetouch/issues) — Bug 报告、功能请求
 
 ---
 
@@ -219,4 +219,4 @@ python -m phone_agent run "你的测试指令"
 
 ---
 
-**感谢你的贡献！每一个 PR 都让 Phone Agent 变得更好。** 🎉
+**感谢你的贡献！每一个 PR 都让 SeeTouch 变得更好。** 🎉

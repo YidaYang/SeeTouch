@@ -24,7 +24,7 @@ metadata:
 
 ```
 open_app(name_or_package):
-  ① learned cache  ~/.phone_agent/learned_apps.json (视觉学到的)
+  ① learned cache  ~/.seetouch/learned_apps.json (视觉学到的)
   ② L1 静态表      app_table.lookup() (17 高频 app: 抖音/B站/微信/QQ...)
   ③ L1' alias      PACKAGE_ALIASES (TikTok→抖音, Twitter→微博...)
   ④ L2 直通        re.match(r'^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$') && installed
@@ -150,7 +150,7 @@ def fuzzy_match(query, candidates):
 
 ### 产品阶段（2026-05-21 起）
 - 默认 `auto`（模型按需启动 VisualCoT）
-- 配置：`PHONE_AGENT_THINKING_MODE` 环境变量
+- 配置：`SEETOUCH_THINKING_MODE` 环境变量
 - 成本监控：`_extract_usage` 带 `reasoning_tokens`
 
 ### 真机发现（2026-05-31）
