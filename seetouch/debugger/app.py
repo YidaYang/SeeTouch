@@ -104,9 +104,13 @@ def create_app(settings: AppSettings | None = None) -> tuple[Flask, SocketIO]:
             def on_error(message: str):
                 socketio.emit("error", {"message": message})
 
+            def on_state_change(state: str):
+                socketio.emit("status", {"state": state})
+
             debug_session.on_step_result = on_step_result
             debug_session.on_task_finished = on_task_finished
             debug_session.on_error = on_error
+            debug_session.on_state_change = on_state_change
 
             debug_session.start_task(instruction, max_steps=max_steps)
             socketio.emit("status", {"state": debug_session.state})

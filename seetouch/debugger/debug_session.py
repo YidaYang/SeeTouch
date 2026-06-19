@@ -137,6 +137,7 @@ class DebugSession:
         self.on_step_result: Any = None   # Callable[[StepData], None]
         self.on_task_finished: Any = None  # Callable[[dict], None]
         self.on_error: Any = None         # Callable[[str], None]
+        self.on_state_change: Any = None  # Callable[[SessionState], None]
 
     @property
     def state(self) -> SessionState:
@@ -193,6 +194,20 @@ class DebugSession:
             self._stop_event.set()
             self._step_event.set()  # 唤醒可能在等待的工作线程
 
+    def _set_state(self, new_state: SessionState) -> None:
+        """更新状态并通知前端(调用方不应持有 _lock)。
+
+        worker 线程的状态变更必须经由此方法推送,否则前端无从得知
+        stepping->paused 这类后台转换,会导致按钮永久卡死。
+        """
+        with self._lock:
+            self._state = new_state
+        if self.on_state_change:
+            try:
+                self.on_state_change(new_state)
+            except Exception:
+                logger.exception("on_state_change callback failed")
+
     def _worker(self) -> None:
         """工作线程主循环。"""
         try:
@@ -217,8 +232,7 @@ class DebugSession:
                         logger.exception("runner.step() failed")
                         if self.on_error:
                             self.on_error(f"执行出错: {type(exc).__name__}: {exc}")
-                        with self._lock:
-                            self._state = "finished"
+                        self._set_state("finished")
                         return
 
                     step_data = step_result_to_data(result)
@@ -230,8 +244,7 @@ class DebugSession:
 
                     # 任务结束
                     if result.terminal:
-                        with self._lock:
-                            self._state = "finished"
+                        self._set_state("finished")
                         if self.on_task_finished:
                             session = self.runner.session
                             summary = session.summarize() if session else None
@@ -245,15 +258,13 @@ class DebugSession:
                             })
                         return
 
-                    # 单步模式:执行完一步后暂停
+                    # 单步(stepping)或被 do_pause() 打断(paused):执行完本步后暂停,
+                    # 回到外层 wait 等待下一条指令。running 状态则继续循环。
                     with self._lock:
-                        if self._state == "stepping":
-                            self._state = "paused"
-                            break  # 回到外层 wait
-                        elif self._state == "paused":
-                            # do_pause() 被调用了
-                            break
-                        # running 状态继续循环
+                        current = self._state
+                    if current in ("stepping", "paused"):
+                        self._set_state("paused")
+                        break
 
         except Exception as exc:
             logger.exception("debug worker unexpected error")
@@ -261,5 +272,6 @@ class DebugSession:
                 self.on_error(f"工作线程异常: {type(exc).__name__}: {exc}")
         finally:
             with self._lock:
-                if self._state not in ("finished",):
-                    self._state = "finished" if self.runner.is_finished else "idle"
+                already_finished = self._state == "finished"
+            if not already_finished:
+                self._set_state("finished" if self.runner.is_finished else "idle")
