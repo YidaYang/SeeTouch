@@ -21,6 +21,7 @@ from ..core.action import (
     Action,
 )
 from ..device.base import DeviceController, DeviceError, OpenAppNeedsVisual
+from ..perception.screen import downscale
 from ..reasoning.base import Reasoner
 from ..safety.guard import Guard
 from .session import RunResult, Session, StepResult
@@ -123,6 +124,9 @@ class Runner:
                 terminal=True, terminal_reason=f"screenshot_failed: {exc}",
             )
 
+        # 降分辨率:上传给 VLM、落盘日志统一用这张 720P 图。坐标走归一化,
+        # 设备层用真实分辨率换算像素,缩放不影响点击精度,只省带宽与磁盘。
+        screenshot = downscale(screenshot)
         screenshot_path = session.save_screenshot(step, screenshot)
 
         # 2. 推理

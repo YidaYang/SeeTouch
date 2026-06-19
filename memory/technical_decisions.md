@@ -7,7 +7,7 @@ metadata:
 
 # 关键技术决策
 
-更新时间：2026-06-17
+更新时间：2026-06-19
 
 ---
 
@@ -142,6 +142,33 @@ def fuzzy_match(query, candidates):
 
 ---
 
+## 截图工作分辨率：统一降到 720P（2026-06-19）
+
+### 决策
+
+`device.screenshot()` 拿到的全分辨率截图，在 `Runner.step()` **源头**立刻 `downscale()` 到宽 720（如 1440×3200 → 720×1600）。之后**上传 VLM、落盘日志、parser 尺寸基准三者共用这一张 720P 图**，不再各自处理。
+
+### Why
+
+- **上传带宽**：全尺寸 PNG 每步传给 Doubao API 是 `reasoning_time` 里的上传大头；降到 720P 像素量约降 4 倍（4.6M → 1.15M px），直接缩短上传段。
+- **日志体积**：`runs/<task>/step_*.png` 之前存全尺寸，日志目录膨胀快；同一张 720P 同步瘦身。
+
+### 为什么对点击零影响（关键，非显然）
+
+坐标全程走 0-1000 归一化：模型输出归一化 → parser 保持归一化（`image_size` 仅在模型误输出像素值时当兜底换算）→ `AndroidController.click` 用 `self.screen_size()`（u2 `window_size()`，**真实设备分辨率**）换算像素。**截图分辨率从不参与点击坐标计算**，所以可随意缩放。参见 [[#坐标体系沿用比赛协议]]。
+
+### How to apply
+
+- 缩放统一走 `perception/screen.py` 的 `downscale(image, max_width=WORK_MAX_WIDTH=720)`，不要在多处各缩各的。
+- 调试器前端 `_image_to_b64(max_width=720)` 现在是 no-op（源头已 720），不会二次缩放。
+- 还想再压上传体积：下一个杠杆是上传转 JPEG（当前仍 PNG，720P PNG ~几百 KB，JPEG ~几十 KB）。
+
+### thinking 开关不在此次优化范围
+
+thinking 慢主要在**服务端推理**，不在上传。成熟产品里 thinking 开不开**由用户指定**，不能为省时间强制关——这次只优化上传链路，不动 thinking。见下节性能对比。
+
+---
+
 ## Doubao thinking 模式演化
 
 ### 比赛阶段（已结束）
@@ -168,7 +195,7 @@ def fuzzy_match(query, candidates):
 
 **Why：** thinking=enabled 慢 2-3 倍，但识别准确率明显提高（B 站开屏广告自动跳过、复杂搜索场景不再瞎点）。
 
-**How to apply：** 产品默认 `enabled`（准确率优先）；成本敏感场景可切 `disabled`；添加新模型时先探测支持的 thinking 模式集合。
+**How to apply：** 产品默认 `enabled`（准确率优先）；成本敏感场景可切 `disabled`；添加新模型时先探测支持的 thinking 模式集合。**成熟产品里 thinking 开关由终端用户指定，系统不强制关**——优化耗时优先动上传/网络等链路，不要替用户关 thinking。
 
 ---
 
