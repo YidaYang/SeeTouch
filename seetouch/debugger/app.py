@@ -177,7 +177,7 @@ def run_server(port: int = 5000, settings: AppSettings | None = None) -> None:
 
     url = f"http://localhost:{port}"
     logger.info("SeeTouch Debugger starting at %s", url)
-    print(f"\n  🔍 SeeTouch Debugger: {url}\n")
+    print(f"\n  SeeTouch Debugger: {url}\n")
 
     # 尝试自动打开浏览器
     try:
