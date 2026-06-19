@@ -111,6 +111,7 @@ metadata:
 - `TYPE {"text": "..."}` — 输入文本（支持中文）
 - `SCROLL {"start_point": [x, y], "end_point": [x, y]}` — 滑动
 - `OPEN {"app_name": "..."}` — 启动应用（中文名或 package）
+- `BACK {}` — 系统返回键，回上一层 / 关弹窗（进错页面、误入子页面、重开流程时用）
 - `WAIT {}` 或 `{"seconds": 1.5}` — 等待界面加载/动画/弹窗消失（0.5-5 秒）
 - `COMPLETE {}` — 任务完成
 

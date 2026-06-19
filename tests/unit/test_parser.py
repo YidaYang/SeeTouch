@@ -8,6 +8,7 @@ from seetouch.core.action import (
     ACTION_CLICK,
     ACTION_COMPLETE,
     ACTION_OPEN,
+    ACTION_BACK,
     ACTION_SCROLL,
     ACTION_TYPE,
 )
@@ -66,6 +67,20 @@ def test_parse_complete():
     raw = '{"action":"COMPLETE","parameters":{}}'
     action = parse_model_output(raw, SCREEN)
     assert action.type == ACTION_COMPLETE
+
+
+def test_parse_back():
+    raw = '{"action":"BACK","parameters":{}}'
+    action = parse_model_output(raw, SCREEN)
+    assert action.type == ACTION_BACK
+    assert action.parameters == {}
+
+
+def test_parse_back_no_parameters_key():
+    # 模型可能不带 parameters 字段
+    raw = '{"action":"BACK"}'
+    action = parse_model_output(raw, SCREEN)
+    assert action.type == ACTION_BACK
 
 
 def test_parse_pixel_coords_converted_to_normalized():

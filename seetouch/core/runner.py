@@ -15,6 +15,7 @@ from ..core.action import (
     ACTION_CLICK,
     ACTION_COMPLETE,
     ACTION_OPEN,
+    ACTION_BACK,
     ACTION_SCROLL,
     ACTION_TYPE,
     ACTION_WAIT,
@@ -310,6 +311,8 @@ class Runner:
             self.device.scroll(start, end)
         elif action.type == ACTION_OPEN:
             self.device.open_app(action.parameters["app_name"])
+        elif action.type == ACTION_BACK:
+            self.device.back()
         elif action.type == ACTION_WAIT:
             seconds = action.parameters.get("seconds", 1.5)
             seconds = max(0.5, min(5.0, float(seconds)))  # 兜底:0.5-5 秒

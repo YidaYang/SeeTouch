@@ -11,6 +11,7 @@ from seetouch.core.action import (
     ACTION_CLICK,
     ACTION_COMPLETE,
     ACTION_OPEN,
+    ACTION_BACK,
     ACTION_SCROLL,
     ACTION_TYPE,
     Action,
@@ -49,6 +50,9 @@ class MockDevice:
 
     def go_home(self):
         self.actions.append(("home", ()))
+
+    def back(self):
+        self.actions.append(("back", ()))
 
     def current_app(self) -> str | None:
         return self._current_app
@@ -92,6 +96,43 @@ def _make_outputs() -> list[ActionOutput]:
             action_summary="任务完成",
         ),
     ]
+
+
+def test_runner_executes_back(tmp_path: Path):
+    """模型输出 BACK 时,Runner 应调用 device.back()。
+
+    场景:打开 app 后停在错误的子页面,先 BACK 退回再继续。
+    """
+    device = MockDevice()
+    reasoner = MockReasoner([
+        ActionOutput(
+            action=Action(type=ACTION_BACK, parameters={}),
+            screen_summary="停在上次的搜索结果页,不是首页",
+            action_summary="返回上一层",
+        ),
+        ActionOutput(
+            action=Action(type=ACTION_CLICK, parameters={"point": [500, 100]}),
+            screen_summary="已回到首页",
+            action_summary="点击搜索入口",
+        ),
+        ActionOutput(
+            action=Action(type=ACTION_COMPLETE, parameters={}),
+            screen_summary="搜索界面",
+            action_summary="完成",
+        ),
+    ])
+    runner = Runner(
+        device=device,
+        reasoner=reasoner,
+        guard=Guard(prompt_fn=lambda _msg: False),
+        runs_dir=tmp_path,
+    )
+
+    result = runner.run(Task(instruction="在 B 站搜索采莲曲"))
+
+    assert result.completed
+    types = [a[0] for a in device.actions]
+    assert types == ["back", "click"]
 
 
 def test_runner_completes_normal_task(tmp_path: Path):

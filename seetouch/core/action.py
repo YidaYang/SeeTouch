@@ -9,18 +9,19 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 
-ActionType = Literal["CLICK", "TYPE", "SCROLL", "OPEN", "WAIT", "COMPLETE"]
+ActionType = Literal["CLICK", "TYPE", "SCROLL", "OPEN", "BACK", "WAIT", "COMPLETE"]
 
 
 ACTION_CLICK: ActionType = "CLICK"
 ACTION_TYPE: ActionType = "TYPE"
 ACTION_SCROLL: ActionType = "SCROLL"
 ACTION_OPEN: ActionType = "OPEN"
+ACTION_BACK: ActionType = "BACK"
 ACTION_WAIT: ActionType = "WAIT"
 ACTION_COMPLETE: ActionType = "COMPLETE"
 
 VALID_ACTIONS: frozenset[str] = frozenset(
-    {ACTION_CLICK, ACTION_TYPE, ACTION_SCROLL, ACTION_OPEN, ACTION_WAIT, ACTION_COMPLETE}
+    {ACTION_CLICK, ACTION_TYPE, ACTION_SCROLL, ACTION_OPEN, ACTION_BACK, ACTION_WAIT, ACTION_COMPLETE}
 )
 
 
@@ -33,6 +34,7 @@ class Action:
         TYPE:     {"text": "..."}
         SCROLL:   {"start_point": [x, y], "end_point": [x, y]}
         OPEN:     {"app_name": "..."}    # 中文名 或 Android package
+        BACK:     {}                       # 系统返回键:回上一层 / 关弹窗
         WAIT:     {} 或 {"seconds": float}  # 等待界面加载 / 动画 / 弹窗消失
         COMPLETE: {}
     """

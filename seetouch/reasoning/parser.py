@@ -14,6 +14,7 @@ from ..core.action import (
     ACTION_CLICK,
     ACTION_COMPLETE,
     ACTION_OPEN,
+    ACTION_BACK,
     ACTION_SCROLL,
     ACTION_TYPE,
     ACTION_WAIT,
@@ -126,6 +127,9 @@ def _normalize_parsed_action(
     if action_type == ACTION_COMPLETE:
         return Action(type=ACTION_COMPLETE, parameters={})
 
+    if action_type == ACTION_BACK:
+        return Action(type=ACTION_BACK, parameters={})
+
     if action_type == ACTION_WAIT:
         seconds = params.get("seconds") or params.get("duration")
         if isinstance(seconds, (int, float)) and seconds > 0:
@@ -140,7 +144,7 @@ def _normalize_parsed_action(
 
 def _parse_simple_action(text: str, image_size: Tuple[int, int]) -> Action | None:
     match = re.search(
-        r"\b(CLICK|TYPE|OPEN|SCROLL|WAIT|COMPLETE)\b\s*[:：]\s*(.*)",
+        r"\b(CLICK|TYPE|OPEN|SCROLL|BACK|WAIT|COMPLETE)\b\s*[:：]\s*(.*)",
         text,
         re.IGNORECASE | re.DOTALL,
     )
@@ -181,6 +185,9 @@ def _parse_simple_action(text: str, image_size: Tuple[int, int]) -> Action | Non
 
     if action_type == ACTION_COMPLETE:
         return Action(type=ACTION_COMPLETE, parameters={})
+
+    if action_type == ACTION_BACK:
+        return Action(type=ACTION_BACK, parameters={})
 
     if action_type == ACTION_WAIT:
         return Action(type=ACTION_WAIT, parameters={})

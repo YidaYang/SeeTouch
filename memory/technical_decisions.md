@@ -130,7 +130,34 @@ def fuzzy_match(query, candidates):
 
 **Why：** 模型有"等一下"的合理需求。静默 fallback 到 COMPLETE 极其危险——任何 parser bug 都会被伪装成"任务完成"，后续无从排查。
 
-**How to apply：** 之后再发现模型输出协议外的 action，优先**加协议**（如 LONG_PRESS、PINCH），不要再让 parser 兜底到 WAIT 之外。
+**How to apply：** 之后再发现模型输出协议外的 action，优先**加协议**（如 LONG_PRESS、PINCH），不要再让 parser 兜底到 WAIT 之外。已落地一例见下节 [[#BACK 返回键动作（2026-06-19 新增）]]。
+
+---
+
+## BACK 返回键动作（2026-06-19 新增）
+
+### 设计初衷
+
+真机"在哔哩哔哩搜索采莲曲"时，打开 B 站后停在了**上次的搜索结果页**（不是首页）。正常应按系统返回键退回首页再重新点搜索框，但协议没有返回动作，模型只能反复点搜索框 / 卡死。Android 的返回是系统级硬件/手势键，**不是屏幕可点击控件，CLICK 任何坐标都点不到**，必须新增独立动作。
+
+### 实现（全链路 6 处）
+
+- `core/action.py`：`ACTION_BACK="BACK"` 加入 `ActionType` / `VALID_ACTIONS`；无参数，`validate()` 走 fall-through（同 COMPLETE）。
+- `device/base.py`：Protocol 新增 `back()`。
+- `device/android/controller.py`：`back()` = `self._d.press("back")`（与 `go_home` 的 `press("home")` 对称）。
+- `core/runner.py`：`_execute` 加 `elif ACTION_BACK: self.device.back()`，不加 sleep（同 CLICK，press 同步）。
+- `reasoning/parser.py`：JSON 路径 + 文本兜底正则都加 BACK 分支，无参数返回 `Action(BACK, {})`。
+- `reasoning/prompts.py`：Schema 枚举、参数表、附录规则 11（进错页/子页面/重开流程时 BACK 退一层，别卡原地或反复点）、few-shot 示例6。
+
+### 关键点
+
+- **死循环检测自动覆盖**：连按 3 次 BACK 触发 `stuck_loop` abort，正好兜住"狂按返回把 app 退出"的失控，无需额外逻辑。
+- **prompt 提醒副作用**：在 app 首页再 BACK 可能直接退出 app，需重新进入时改用 OPEN；关广告/弹窗优先点 X / 跳过，找不到关闭按钮才用 BACK。
+- 调试器无需改：BACK 是无坐标动作，`drawActionOverlay` 只对 CLICK/SCROLL 画覆盖层，其余（WAIT/OPEN/COMPLETE/BACK）直接显示动作名文字。
+
+**Why：** 兑现了 WAIT 节"优先加协议"的约定——返回是真机高频刚需，缺它会直接卡死任务。
+
+**How to apply：** 后续若再加 HOME / LONG_PRESS / 切换 app 等系统级动作，照这条 6 处链路改（action→base→controller→runner→parser→prompts + 测试），并确认死循环检测与调试器渲染是否需要适配。
 
 ---
 

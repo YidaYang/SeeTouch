@@ -113,6 +113,9 @@ class AndroidController:
     def go_home(self) -> None:
         self._d.press("home")
 
+    def back(self) -> None:
+        self._d.press("back")
+
     def current_app(self) -> str | None:
         """当前前台 app 的 package(用于 Runner 判断启动是否成功 / 视觉兜底是否捕获新 app)。"""
         try:

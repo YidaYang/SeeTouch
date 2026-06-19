@@ -68,6 +68,10 @@ class DeviceController(Protocol):
         """回到桌面。"""
         ...
 
+    def back(self) -> None:
+        """按系统返回键:回到上一层页面 / 关闭当前弹窗或子页面。"""
+        ...
+
     def current_app(self) -> str | None:
         """当前前台 app 的 package name。无法获取时返回 None。
 

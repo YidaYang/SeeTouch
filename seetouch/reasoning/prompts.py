@@ -65,12 +65,16 @@ SYSTEM_PROMPT_TEMPLATE = """\
       - 部分手机(MIUI 抽屉模式、原生 Android)需要从下往上 SCROLL `[500,900] -> [500,300]` 打开应用抽屉查看全部 app。
       - 找到目标 app 图标后 CLICK 图标中心。
       - **何时放弃**:已经翻完所有桌面页 + 探索过名字相关的文件夹 + (如有抽屉)抽屉也滚到底,仍找不到,输出 COMPLETE 并在 action_summary 说明"未找到目标 app"。不要无止境翻页。
+11. 当前页面不是任务需要的页面时(例如打开 app 后停在了上次的搜索结果页、误进了详情页 / 子页面、或想重新开始一个流程),输出 BACK 返回上一层,不要卡在原地、也不要反复点击同一个控件。
+    - BACK 用于"退一层"或"关掉当前弹窗 / 页面",回到上一个界面。
+    - 注意:在 app 首页再按 BACK 可能直接退出 app;需要重新进入时改用 OPEN。
+    - 关闭开屏广告 / 弹窗优先点 X 或"跳过";只有找不到关闭按钮时才考虑 BACK。
 
 唯一允许的 JSON Schema:
 {{
   "screen_summary": "<根据当前截图、用户任务总结当前界面和任务进度>",
   "action_summary": "<根据当前截图、用户任务总结本步要执行的操作>",
-  "action": "<CLICK|TYPE|SCROLL|OPEN|WAIT|COMPLETE>",
+  "action": "<CLICK|TYPE|SCROLL|OPEN|BACK|WAIT|COMPLETE>",
   "parameters": {{}}
 }}
 
@@ -79,6 +83,7 @@ parameters 参数规则:
 - TYPE:     {{"text":"要输入的文本"}}
 - SCROLL:   {{"start_point":[x1,y1],"end_point":[x2,y2]}}
 - OPEN:     {{"app_name":"Android package 或 中文 app 全名"}}
+- BACK:     {{}}    # 系统返回键,回到上一层页面 / 关闭当前弹窗
 - WAIT:     {{}} 或 {{"seconds":1.5}}    # 等待界面加载、动画、弹窗消失;不要乱用,只在确实需要等待时用
 - COMPLETE: {{}}
 
@@ -103,6 +108,9 @@ few-shot 示例(仅用于理解格式,实际输出必须根据当前截图重新
 
 示例5(已到达任务目标):
 {{"screen_summary":"已进入目标内容页面,界面与用户任务目标一致。","action_summary":"任务目标已达成,停止操作。","action":"COMPLETE","parameters":{{}}}}
+
+示例6(进错页面,需要返回):
+{{"screen_summary":"打开 B 站后停在上次的搜索结果页,不是首页,无法直接发起新搜索。","action_summary":"按返回键回到上一层,准备重新进入搜索。","action":"BACK","parameters":{{}}}}
 
 请只输出一个 JSON 对象,不要 Markdown,不要解释,不要输出多余文本。
 """
