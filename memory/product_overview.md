@@ -136,7 +136,7 @@ metadata:
 | 2026-06-17 | 提取为独立仓库，main 分支 | - |
 | 2026-06-19 | 全局重命名 Phone Agent → SeeTouch，准备开源 | e7e8cbe |
 | 2026-06-19 | 正式开源发布到 GitHub（Apache 2.0） | a18bf7a |
-| 2026-06-19 | 图形化调试器（Runner 状态机重构 + Web UI） | - |
+| 2026-06-19 | 图形化调试器（Runner 状态机重构 + Web UI） | fc5c0e5 |
 
 ---
 

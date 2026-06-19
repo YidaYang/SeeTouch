@@ -118,6 +118,7 @@ metadata:
 ### 2026-06-19：图形化调试器
 
 - **动机**: 之前只能命令行运行 + 看 log 调试，不直观且不支持单步执行
+- **commit**: `fc5c0e5`（feat 主体）→ `5500317`（修 Windows 启动崩溃）→ `f15c664`（修单步卡死）
 - **架构变更**:
   - Runner 从紧耦合 for 循环重构为 `start()` / `step()` / `run()` 状态机
   - `run()` 变成 `start() + 循环 step()` 的语法糖，CLI 行为完全不变
@@ -125,17 +126,37 @@ metadata:
   - 新增 `StepResult` 数据类，每步产出完整可观测数据
   - Session trace 扩展写入 prompt_text / reasoning_time / execution_time
 - **调试器模块**: `seetouch/debugger/`
-  - 后端: Flask + Flask-SocketIO（WebSocket 实时推送）
+  - 后端: Flask + Flask-SocketIO（threading async_mode，WebSocket 实时推送）
   - 前端: 原生 HTML/CSS/JS 暗色主题 Web UI
+  - 线程模型: SocketIO 事件在主线程，`Runner.step()` 在 worker 线程，用 `threading.Event` 同步
   - 截图 Canvas 标注: CLICK 画红点+十字准星、SCROLL 画虚线箭头
   - 控制: Step（单步）/ Run（连续）/ Pause / Stop
   - 时间线: 可点击回看任意历史步骤
   - Prompt / Model Output 可折叠查看
 - **启动方式**: `python -m seetouch debug [--port 5000]`
 - **依赖**: `pip install seetouch[debugger]`（flask + flask-socketio）
-- **验证**: 42 个现有测试全部通过，0 回归
+- **已知缺口**: 敏感动作确认当前 `Guard(prompt_fn=lambda msg: True)` 自动批准，未做 WebSocket 双向确认弹窗
+- **验证**: 42 个现有测试全部通过，0 回归 + 真机单步/连续执行通过
 
 ## 重大 bug 复盘
+
+### 调试器单步执行卡死（2026-06-19）
+
+**症状：** 点 Step 执行完当前步骤后，只有 Stop 按钮可点，其他按钮全灰；一点 Stop 整个会话结束、记录像是丢了，无法继续单步。
+
+**根因链：**
+1. 前端点 Step → 后端 `on_step` 把状态置 `stepping` 并同步 `emit("status","stepping")`，前端按钮只剩 Stop（这是正确的执行中态）
+2. worker 线程执行完该步，在后台把状态改回 `paused`，但**只 emit 了 `step_result`，从不 emit `status`**
+3. 前端 `step_result` 处理器仅在 `terminal` 时才 `updateState`，非终止步不更新 → 前端永远停在 `stepping`，按钮永久卡死
+4. 用户被迫只能 Stop，而 Stop 会 `debug_session = None` 拆掉会话 → 误以为"记录丢了"
+
+**修复（commit `f15c664`）：**
+- DebugSession 新增 `on_state_change` 回调 + `_set_state()` 方法（释放锁后再触发回调，避免死锁）
+- worker 所有后台状态转换（`stepping→paused` / `→finished` / 异常兜底 / `finally`）统一经 `_set_state()` 推送 `status`
+- app.py 注册 `on_state_change → socketio.emit("status")`
+- 顺带修掉 `runner.step()` 抛异常时前端同样卡在 `stepping` 的同类 bug
+
+**经验：** 工作线程的**每一次**状态变更都必须主动推送给前端，不能依赖"前端从其他事件里推断状态"。主线程同步 emit 的只是发起瞬间的中间态（stepping/running），后台线程完成后的回落态（paused/finished）若不显式推送，UI 必然与真实状态脱节。事件驱动 UI 里，状态机的每个出边都要有对应的通知边。
 
 ### 首次真机死循环（2026-05-20）
 
