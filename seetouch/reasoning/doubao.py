@@ -89,6 +89,7 @@ class DoubaoReasoner:
         try:
             response = self._call_api(messages)
             raw_output = self._extract_response_text(response)
+            reasoning_content = self._extract_reasoning_content(response)
             usage = self._extract_usage(response)
         except Exception as exc:
             logger.error("doubao api call failed: %s", exc)
@@ -115,6 +116,7 @@ class DoubaoReasoner:
                 action_summary="模型输出无法解析,降级为等待后重试",
                 usage=usage,
                 prompt_text=prompt_text,
+                reasoning_content=reasoning_content,
             )
 
         return ActionOutput(
@@ -124,6 +126,7 @@ class DoubaoReasoner:
             action_summary=summary.get("action_summary", ""),
             usage=usage,
             prompt_text=prompt_text,
+            reasoning_content=reasoning_content,
         )
 
     # ---------------------------- 内部 ----------------------------
@@ -176,6 +179,19 @@ class DoubaoReasoner:
             return content
         import json
         return json.dumps(content, ensure_ascii=False)
+
+    def _extract_reasoning_content(self, response: Any) -> str:
+        """提取思维链文本。
+
+        Doubao thinking 开启后,VisualCoT 推理内容放在 message.reasoning_content
+        独立字段(不在 content 里)。thinking=disabled 时该字段缺失或为空。
+        """
+        try:
+            message = response.choices[0].message
+        except Exception:
+            return ""
+        reasoning = getattr(message, "reasoning_content", None)
+        return reasoning if isinstance(reasoning, str) else ""
 
     def _extract_usage(self, response: Any) -> dict[str, Any] | None:
         usage = getattr(response, "usage", None)

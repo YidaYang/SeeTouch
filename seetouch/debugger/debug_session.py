@@ -33,6 +33,7 @@ class StepData:
     screenshot_path: str
     prompt_text: str
     raw_output: str
+    reasoning_content: str
     action_type: str
     action_params: dict[str, Any]
     screen_summary: str
@@ -52,6 +53,7 @@ class StepData:
             "screenshot_path": self.screenshot_path,
             "prompt_text": self.prompt_text,
             "raw_output": self.raw_output,
+            "reasoning_content": self.reasoning_content,
             "action_type": self.action_type,
             "action_params": self.action_params,
             "screen_summary": self.screen_summary,
@@ -87,6 +89,7 @@ def step_result_to_data(result: StepResult) -> StepData:
         screenshot_path=str(result.screenshot_path) if result.screenshot_path else "",
         prompt_text=result.prompt_text,
         raw_output=result.raw_output,
+        reasoning_content=result.reasoning_content,
         action_type=result.action.type,
         action_params=result.action.parameters,
         screen_summary=result.screen_summary,

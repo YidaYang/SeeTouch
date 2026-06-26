@@ -31,6 +31,7 @@ class StepResult:
     screenshot_path: Path | None
     prompt_text: str
     raw_output: str
+    reasoning_content: str
     action: Action
     screen_summary: str
     action_summary: str

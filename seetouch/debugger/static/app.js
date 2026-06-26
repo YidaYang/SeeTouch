@@ -29,6 +29,8 @@ const els = {
     notesSection:    $("notesSection"),
     notesList:       $("notesList"),
     promptText:      $("promptText"),
+    reasoningSection: $("reasoningSection"),
+    reasoningText:   $("reasoningText"),
     rawOutputText:   $("rawOutputText"),
     reasoningTime:   $("reasoningTime"),
     executionTime:   $("executionTime"),
@@ -226,6 +228,14 @@ function renderStepData(data) {
     // Prompt
     els.promptText.textContent = data.prompt_text || "—";
 
+    // 思维链:thinking 开启时才有内容,空则隐藏整个区块
+    if (data.reasoning_content) {
+        els.reasoningSection.style.display = "";
+        els.reasoningText.textContent = data.reasoning_content;
+    } else {
+        els.reasoningSection.style.display = "none";
+    }
+
     // Model Output
     els.rawOutputText.textContent = data.raw_output || "—";
 
@@ -261,6 +271,8 @@ function resetInfoPanel() {
     els.screenSummary.textContent = "—";
     els.notesSection.style.display = "none";
     els.promptText.textContent = "—";
+    els.reasoningSection.style.display = "none";
+    els.reasoningText.textContent = "—";
     els.rawOutputText.textContent = "—";
     els.reasoningTime.textContent = "—";
     els.executionTime.textContent = "—";

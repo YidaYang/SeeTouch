@@ -89,6 +89,17 @@
                     </div>
                 </div>
 
+                <!-- Reasoning / 思维链 (折叠) -->
+                <div class="info-section collapsible" id="reasoningSection" style="display:none;">
+                    <div class="info-label collapsible-header" onclick="toggleSection('reasoningContent')">
+                        <span>▶ 🧠 思维链</span>
+                        <span class="collapse-hint">点击展开</span>
+                    </div>
+                    <div class="collapsible-content" id="reasoningContent">
+                        <pre class="code-block" id="reasoningText">—</pre>
+                    </div>
+                </div>
+
                 <!-- Model Output (折叠) -->
                 <div class="info-section collapsible">
                     <div class="info-label collapsible-header" onclick="toggleSection('rawOutputContent')">

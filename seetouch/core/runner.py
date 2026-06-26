@@ -118,7 +118,8 @@ class Runner:
             screenshot = _Image.new("RGB", (1080, 1920), (0, 0, 0))
             return StepResult(
                 step=step, screenshot=screenshot, screenshot_path=None,
-                prompt_text="", raw_output="", action=Action(type=ACTION_WAIT),
+                prompt_text="", raw_output="", reasoning_content="",
+                action=Action(type=ACTION_WAIT),
                 screen_summary="", action_summary=f"截图失败: {exc}",
                 execution_success=False, notes=[f"screenshot_failed: {exc}"],
                 usage=None, reasoning_time=0.0, execution_time=0.0,
@@ -153,6 +154,7 @@ class Runner:
             return StepResult(
                 step=step, screenshot=screenshot, screenshot_path=screenshot_path,
                 prompt_text=out.prompt_text, raw_output=out.raw_output,
+                reasoning_content=out.reasoning_content,
                 action=out.action, screen_summary=out.screen_summary,
                 action_summary=out.action_summary, execution_success=True,
                 notes=[], usage=out.usage,
@@ -175,6 +177,7 @@ class Runner:
                 return StepResult(
                     step=step, screenshot=screenshot, screenshot_path=screenshot_path,
                     prompt_text=out.prompt_text, raw_output=out.raw_output,
+                    reasoning_content=out.reasoning_content,
                     action=out.action, screen_summary=out.screen_summary,
                     action_summary=out.action_summary, execution_success=None,
                     notes=notes, usage=out.usage,
@@ -259,6 +262,7 @@ class Runner:
         return StepResult(
             step=step, screenshot=screenshot, screenshot_path=screenshot_path,
             prompt_text=out.prompt_text, raw_output=out.raw_output,
+            reasoning_content=out.reasoning_content,
             action=out.action, screen_summary=out.screen_summary,
             action_summary=out.action_summary, execution_success=success,
             notes=notes, usage=out.usage,

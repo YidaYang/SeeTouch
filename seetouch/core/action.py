@@ -79,6 +79,7 @@ class ActionOutput:
         action_summary: 模型对本步动作的解释
         usage:          token 使用统计(可选)
         prompt_text:    发给模型的 prompt 文本(不含图片),用于调试
+        reasoning_content: 模型思维链文本(thinking 开启时有值),用于调试
     """
 
     action: Action
@@ -87,4 +88,5 @@ class ActionOutput:
     action_summary: str = ""
     usage: dict[str, Any] | None = None
     prompt_text: str = ""
+    reasoning_content: str = ""
 
