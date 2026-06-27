@@ -138,12 +138,14 @@ metadata:
 | 2026-06-19 | 全局重命名 Phone Agent → SeeTouch，准备开源 | e7e8cbe |
 | 2026-06-19 | 正式开源发布到 GitHub（Apache 2.0） | a18bf7a |
 | 2026-06-19 | 图形化调试器（Runner 状态机重构 + Web UI） | fc5c0e5 |
+| 2026-06-26 | 调试器展示模型思维链（reasoning_content 端到端透传） | c84f935 |
+| 2026-06-27 | 调试器实时反馈增强（EventBus + 思考动画 + 日志面板） | - |
 
 ---
 
 ## 测试覆盖
 
-- 42 单元测试（parser、screen、app_launcher、guard、runner-with-mock）
+- 65 单元测试（parser、screen、app_launcher、guard、runner-with-mock、event_bus、log_bridge、runner_events）
 - 真机集成测试（Xiaomi rubens / Android 12 / 1440×3200 / 447 包）
 - 覆盖场景：OPEN 五级 fallback、视觉学习、死循环检测、敏感动作拦截
 

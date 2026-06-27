@@ -138,7 +138,46 @@ metadata:
 - **已知缺口**: 敏感动作确认当前 `Guard(prompt_fn=lambda msg: True)` 自动批准，未做 WebSocket 双向确认弹窗
 - **验证**: 42 个现有测试全部通过，0 回归 + 真机单步/连续执行通过
 
+### 2026-06-27：调试器实时反馈增强
+
+- **动机**: 每步执行 5-12 秒（80% 在等 VLM API），期间前端完全无变化，用户体验差
+- **架构变更**:
+  - 新增 `core/event_bus.py`：发布-订阅事件总线（线程安全、异常隔离、多消费者）
+  - 新增 `core/log_bridge.py`：自定义 `logging.Handler` → EventBus 桥接，把 seetouch 命名空间下所有日志转发为事件
+  - Runner 新增可选 `event_bus` 参数，在 4 个关键节点 emit 事件（截屏完成 → 推理开始 → 推理完成 → 执行开始）
+  - DebugSession 订阅 EventBus 事件，通过回调推送 WebSocket
+  - app.py 作为组装层：创建 EventBus → 传给 Runner + DebugSession → 注册 `step_progress` / `log` 回调
+- **前端新增**:
+  - 思考覆盖层：截图完成后 0.3s 内立即显示新截图 + 🧠 脉冲光环动画 + "AI 思考中" + requestAnimationFrame 驱动的实时计时器
+  - 日志面板：主布局第三列，实时滚动显示 Python logging 日志（按级别着色、500 条上限、自动滚动开关）
+- **设计决策**:
+  - 用 EventBus 而非简单回调：天然支持多订阅者（进度 + 日志是两类消费者）、松耦合、未来加 metrics 收集零改动
+  - LogBridge 生命周期与任务绑定：start_task() install，do_stop() / worker 退出 uninstall，不泄露 Handler
+  - 无 EventBus 时（CLI `run()` 路径、旧测试）零开销，所有 emit 走 `if self._event_bus:` 守卫
+- **验证**: 65 个测试全绿（原 45 + 新增 20），0 回归。真机端到端验证待用户接设备确认。
+
 ## 重大 bug 复盘
+
+### 调试器不显示思维链（2026-06-26）
+
+**症状：** thinking=enabled 时调试器只显示模型最终输出（Model Output），看不到 VisualCoT 思维链。
+
+**根因（非显然）：** Doubao thinking 开启后，思维链放在 `response.choices[0].message.reasoning_content` 这个**独立字段**，**不在** `message.content` 里。`DoubaoReasoner._extract_response_text` 只读 `content`，所以思维链在数据进入系统的第一步就被丢弃——不是前端没渲染，是后端根本没拿到。
+
+**修复（commit `c84f935`，端到端 6 处，沿用 BACK/prompt_text 链路模式）：**
+- `doubao.py`：新增 `_extract_reasoning_content()` 从 `message.reasoning_content` 提取
+- `action.py`：`ActionOutput` 加 `reasoning_content` 字段（默认 `""`，不破坏旧构造）
+- `runner.py`：4 处 `StepResult` 构造透传
+- `session.py`：`StepResult` 加字段
+- `debugger/debug_session.py`：`StepData` + `to_dict` + `step_result_to_data` 透传
+- 前端：Prompt 与 Model Output 之间新增「🧠 思维链」折叠区，**有内容才显示**（disabled 时为空 → 隐藏整个区块，不留空框，符合「thinking 开关由用户指定」约定）
+
+**验证：** 45 个测试全绿（之前 42，期间又增了几个），集成测试 `test_runner_with_mock_device.py` 覆盖 `StepResult` 链路，0 回归。真机验证（开 thinking 跑任务看思维链）待用户接设备确认。
+
+**经验：**
+- **OpenAI 兼容 API 的"额外能力"往往在 message 的非标准字段上**（reasoning_content、tool_calls 等），`message.content` 只是最小公共子集。接新模型/新能力时，先 `dir(message)` 或打印整个 response 看有哪些字段，别假设都在 content 里。
+- 这次踩坑印证了"数据丢在第一跳"的排查顺序：UI 不显示某数据，先逆着链路问"这字段是从哪一步开始有值的"，往往根因在最上游的提取处，而非展示层。
+- **测试路径坑**：测试在仓库根 `tests/`（45 个），不是 `seetouch/tests/`（那里只有 10 个旧的 app_launcher）。跑全套用 `python -m pytest tests`。
 
 ### 调试器单步执行卡死（2026-06-19）
 

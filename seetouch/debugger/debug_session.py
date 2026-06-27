@@ -15,6 +15,15 @@ from typing import Any, Literal
 
 from PIL import Image
 
+from ..core.event_bus import (
+    EventBus,
+    LOG,
+    STEP_EXECUTING,
+    STEP_REASONING_DONE,
+    STEP_REASONING_STARTED,
+    STEP_SCREENSHOT_TAKEN,
+)
+from ..core.log_bridge import LogBridge
 from ..core.runner import Runner
 from ..core.session import StepResult
 from ..core.task import Task
@@ -123,10 +132,14 @@ class DebugSession:
       any -> idle (stop)
     """
 
-    def __init__(self, runner: Runner):
+    def __init__(self, runner: Runner, event_bus: EventBus | None = None):
         self.runner = runner
         self._state: SessionState = "idle"
         self._step_history: list[StepData] = []
+
+        # 事件总线 + 日志桥接
+        self._event_bus = event_bus
+        self._log_bridge: LogBridge | None = None
 
         # 工作线程
         self._worker_thread: threading.Thread | None = None
@@ -141,6 +154,17 @@ class DebugSession:
         self.on_task_finished: Any = None  # Callable[[dict], None]
         self.on_error: Any = None         # Callable[[str], None]
         self.on_state_change: Any = None  # Callable[[SessionState], None]
+        self.on_step_progress: Any = None  # Callable[[dict], None]
+        self.on_log: Any = None           # Callable[[dict], None]
+
+        # 订阅 EventBus 事件
+        if self._event_bus:
+            self._event_bus.subscribe(STEP_SCREENSHOT_TAKEN, self._on_screenshot_taken)
+            self._event_bus.subscribe(STEP_REASONING_STARTED, self._on_reasoning_started)
+            self._event_bus.subscribe(STEP_REASONING_DONE, self._on_reasoning_done)
+            self._event_bus.subscribe(STEP_EXECUTING, self._on_executing)
+            self._event_bus.subscribe(LOG, self._dispatch_log)
+
 
     @property
     def state(self) -> SessionState:
@@ -162,6 +186,11 @@ class DebugSession:
 
             task = Task(instruction=instruction, max_steps=max_steps)
             self.runner.start(task)
+
+            # 安装日志桥接
+            if self._event_bus:
+                self._log_bridge = LogBridge(self._event_bus)
+                self._log_bridge.install()
 
             self._state = "paused"  # 等待用户点 step 或 run
             self._worker_thread = threading.Thread(
@@ -196,6 +225,10 @@ class DebugSession:
         with self._lock:
             self._stop_event.set()
             self._step_event.set()  # 唤醒可能在等待的工作线程
+        # 卸载日志桥接
+        if self._log_bridge:
+            self._log_bridge.uninstall()
+            self._log_bridge = None
 
     def _set_state(self, new_state: SessionState) -> None:
         """更新状态并通知前端(调用方不应持有 _lock)。
@@ -274,7 +307,58 @@ class DebugSession:
             if self.on_error:
                 self.on_error(f"工作线程异常: {type(exc).__name__}: {exc}")
         finally:
+            # 卸载日志桥接
+            if self._log_bridge:
+                self._log_bridge.uninstall()
+                self._log_bridge = None
             with self._lock:
                 already_finished = self._state == "finished"
             if not already_finished:
                 self._set_state("finished" if self.runner.is_finished else "idle")
+
+    # ======================== EventBus 事件处理 ========================
+
+    def _on_screenshot_taken(self, step: int, screenshot: Any, **_kw: Any) -> None:
+        """截图完成:立即推送截图到前端。"""
+        if self.on_step_progress:
+            self.on_step_progress({
+                "phase": "screenshot_taken",
+                "step": step,
+                "screenshot_b64": _image_to_b64(screenshot),
+            })
+
+    def _on_reasoning_started(self, step: int, **_kw: Any) -> None:
+        """推理开始:通知前端显示思考动画。"""
+        if self.on_step_progress:
+            self.on_step_progress({
+                "phase": "reasoning_started",
+                "step": step,
+            })
+
+    def _on_reasoning_done(
+        self, step: int, action: Any, reasoning_time: float, **_kw: Any,
+    ) -> None:
+        """推理完成:通知前端隐藏思考动画、画动作标注。"""
+        if self.on_step_progress:
+            self.on_step_progress({
+                "phase": "reasoning_done",
+                "step": step,
+                "action_type": action.type,
+                "action_params": action.parameters,
+                "reasoning_time": round(reasoning_time, 2),
+            })
+
+    def _on_executing(self, step: int, action: Any, **_kw: Any) -> None:
+        """执行开始:通知前端。"""
+        if self.on_step_progress:
+            self.on_step_progress({
+                "phase": "executing",
+                "step": step,
+                "action_type": action.type,
+                "action_params": action.parameters,
+            })
+
+    def _dispatch_log(self, **data: Any) -> None:
+        """日志事件:转发到前端。"""
+        if self.on_log:
+            self.on_log(data)

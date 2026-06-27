@@ -226,6 +226,53 @@ thinking 慢主要在**服务端推理**，不在上传。成熟产品里 thinki
 
 ---
 
+## 思维链在 reasoning_content 独立字段（2026-06-26）
+
+**关键事实：** thinking=enabled 时，Doubao 把 VisualCoT 思维链放在 `response.choices[0].message.reasoning_content`，**不在** `message.content`。只读 content 会完全丢掉思维链。
+
+**已落地：** `DoubaoReasoner._extract_reasoning_content()` 提取该字段 → 经 `ActionOutput.reasoning_content` → `StepResult` → 调试器「🧠 思维链」折叠区（详见 [[development_history.md]] 2026-06-26 复盘）。
+
+**Why / How to apply：** OpenAI 兼容 API 的扩展能力常挂在 message 的非标准字段（reasoning_content / tool_calls 等），content 只是最小公共子集。接新模型或新能力时先打印整个 response 看字段，别假设都在 content 里。
+
+---
+
+## EventBus 事件总线（2026-06-27 新增）
+
+### 设计初衷
+
+调试器每步执行 5-12 秒（80% 在等 VLM API），前端完全无反馈。需要在 Runner 执行过程中向外广播中间状态（截图完成、推理中、推理完成等），同时还需要把 Python logging 日志实时流到前端。
+
+### 为什么不用简单回调
+
+- 回调只能挂一个消费者，加第二个就要改接口
+- 进度流和日志流是两类不同的消费者，都监听同一套事件
+- 未来加 metrics 收集、远程推送等零改动
+
+### 实现
+
+```
+core/event_bus.py  — 发布-订阅，线程安全(RLock)，handler 异常不影响其他
+core/log_bridge.py — logging.Handler → EventBus 桥接，生命周期 install/uninstall 幂等
+```
+
+**事件类型：**
+- `step.screenshot_taken` — 截图 + 降分辨率完成（含 PIL Image）
+- `step.reasoning_started` — 开始调用 VLM API
+- `step.reasoning_done` — VLM 返回，含 action + reasoning_time
+- `step.executing` — 开始执行设备动作
+- `log` — 日志记录（由 LogBridge 发射）
+
+**组装层（app.py）：**
+```
+EventBus() → Runner(event_bus=bus) + DebugSession(runner, event_bus=bus)
+           → LogBridge(bus).install()
+           → DebugSession 订阅事件 → socketio.emit("step_progress" / "log")
+```
+
+**How to apply：** 后续如需新增可观测数据（如 token 流式输出、设备状态变化），在 `event_bus.py` 定义新事件常量，Runner 或其他模块 emit，消费者 subscribe 即可，不改现有接口。CLI 路径不传 event_bus，零开销。
+
+---
+
 ## 死循环检测（2026-05-21 新增）
 
 ### 机制

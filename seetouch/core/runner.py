@@ -10,7 +10,16 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
+from typing import Any
 
+from .event_bus import (
+    EventBus,
+    STEP_COMPLETED,
+    STEP_EXECUTING,
+    STEP_REASONING_DONE,
+    STEP_REASONING_STARTED,
+    STEP_SCREENSHOT_TAKEN,
+)
 from ..core.action import (
     ACTION_CLICK,
     ACTION_COMPLETE,
@@ -56,6 +65,7 @@ class Runner:
         runs_dir: Path | str = "runs",
         max_consecutive_failures: int = 2,
         max_consecutive_identical_actions: int = 3,
+        event_bus: EventBus | None = None,
     ):
         self.device = device
         self.reasoner = reasoner
@@ -63,6 +73,7 @@ class Runner:
         self.runs_dir = Path(runs_dir)
         self.max_consecutive_failures = max_consecutive_failures
         self.max_consecutive_identical_actions = max_consecutive_identical_actions
+        self._event_bus = event_bus
 
         # 运行状态(start() 初始化,step() 推进)
         self._session: Session | None = None
@@ -131,10 +142,19 @@ class Runner:
         screenshot = downscale(screenshot)
         screenshot_path = session.save_screenshot(step, screenshot)
 
+        self._emit(STEP_SCREENSHOT_TAKEN, step=step, screenshot=screenshot)
+
         # 2. 推理
+        self._emit(STEP_REASONING_STARTED, step=step)
         t0 = time.perf_counter()
         out = self.reasoner.predict(task.instruction, screenshot, session.history)
         reasoning_time = time.perf_counter() - t0
+        self._emit(
+            STEP_REASONING_DONE,
+            step=step,
+            action=out.action,
+            reasoning_time=reasoning_time,
+        )
 
         logger.info(
             "[step %d] action=%s params=%s (%.1fs)",
@@ -188,6 +208,7 @@ class Runner:
         # 5. 执行
         notes: list[str] = []
         success: bool | None
+        self._emit(STEP_EXECUTING, step=step, action=out.action)
         t1 = time.perf_counter()
         try:
             self._execute(out.action)
@@ -295,6 +316,11 @@ class Runner:
         return self._current_step
 
     # ======================== 内部 ========================
+
+    def _emit(self, event_type: str, **data: Any) -> None:
+        """向 EventBus 发射事件(如果已配置)。"""
+        if self._event_bus:
+            self._event_bus.emit(event_type, **data)
 
     def _safe_current_app(self) -> str | None:
         try:

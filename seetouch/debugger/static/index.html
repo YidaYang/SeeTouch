@@ -39,6 +39,15 @@
                     <div class="placeholder-text">等待任务启动...</div>
                 </div>
                 <canvas id="screenshotCanvas" style="display:none;"></canvas>
+                <div class="reasoning-overlay" id="reasoningOverlay" style="display:none;">
+                    <div class="thinking-animation">
+                        <div class="brain-pulse">
+                            <span class="emoji">🧠</span>
+                        </div>
+                        <span class="thinking-text">AI 思考中</span>
+                        <span class="thinking-timer" id="thinkingTimer">0.0s</span>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -143,6 +152,21 @@
                     </div>
                 </div>
             </div>
+        </section>
+
+        <!-- 日志面板 -->
+        <section class="panel log-panel">
+            <div class="panel-header">
+                <h2>📟 运行日志</h2>
+                <div class="log-controls">
+                    <button class="btn-mini" id="btnClearLog" onclick="clearLog()">清空</button>
+                    <label class="auto-scroll-toggle">
+                        <input type="checkbox" id="logAutoScroll" checked>
+                        自动滚动
+                    </label>
+                </div>
+            </div>
+            <div class="log-container" id="logContainer"></div>
         </section>
     </main>
 

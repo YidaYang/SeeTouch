@@ -210,7 +210,7 @@ html, body {
 /* ============ Screenshot Panel ============ */
 
 .screenshot-panel {
-    flex: 0 0 380px;
+    flex: 0 0 360px;
     min-width: 320px;
 }
 
@@ -739,6 +739,205 @@ html, body {
     from { opacity: 1; }
     to   { opacity: 0; transform: translateY(-10px); }
 }
+
+/* ============ Reasoning Overlay / Thinking Animation ============ */
+
+.reasoning-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    background: radial-gradient(
+        ellipse at center,
+        rgba(91, 158, 244, 0.10) 0%,
+        rgba(15, 17, 23, 0.55) 100%
+    );
+    backdrop-filter: blur(2px);
+    animation: overlayFadeIn 300ms ease;
+}
+
+@keyframes overlayFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.thinking-animation {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.brain-pulse {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(91, 158, 244, 0.3) 0%, transparent 70%);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.brain-pulse::before,
+.brain-pulse::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 2px solid rgba(91, 158, 244, 0.35);
+    animation: ripple 2s ease-out infinite;
+}
+
+.brain-pulse::after {
+    animation-delay: 1s;
+}
+
+@keyframes ripple {
+    0%   { transform: scale(0.8); opacity: 1; }
+    100% { transform: scale(2.2); opacity: 0; }
+}
+
+.brain-pulse .emoji {
+    font-size: 28px;
+    animation: breathe 2s ease-in-out infinite;
+    line-height: 1;
+}
+
+@keyframes breathe {
+    0%, 100% { transform: scale(1.0); }
+    50%      { transform: scale(1.15); }
+}
+
+.thinking-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    letter-spacing: 0.5px;
+}
+
+.thinking-timer {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ============ Log Panel ============ */
+
+.log-panel {
+    flex: 0 0 340px;
+    min-width: 280px;
+}
+
+.log-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn-mini {
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: var(--font-sans);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-mini:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-active);
+    color: var(--text-primary);
+}
+
+.auto-scroll-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+}
+
+.auto-scroll-toggle input[type="checkbox"] {
+    accent-color: var(--accent-blue);
+    width: 13px;
+    height: 13px;
+    cursor: pointer;
+}
+
+.log-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.6;
+    background: var(--bg-primary);
+    margin: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.log-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.log-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.log-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+.log-entry {
+    padding: 1px 4px;
+    border-radius: 2px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    animation: logFadeIn 200ms ease;
+}
+
+@keyframes logFadeIn {
+    from { opacity: 0; transform: translateX(-4px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+.log-entry:hover {
+    background: var(--bg-hover);
+}
+
+.log-entry .log-time {
+    color: var(--text-muted);
+    margin-right: 6px;
+}
+
+.log-entry .log-level {
+    font-weight: 600;
+    margin-right: 6px;
+    min-width: 52px;
+    display: inline-block;
+}
+
+.log-entry .log-name {
+    color: var(--accent-purple);
+    margin-right: 6px;
+}
+
+.log-entry.level-INFO .log-level    { color: var(--text-secondary); }
+.log-entry.level-WARNING .log-level { color: var(--accent-orange); }
+.log-entry.level-ERROR .log-level   { color: var(--accent-red); }
+.log-entry.level-DEBUG .log-level   { color: var(--text-muted); }
 
 /* ============ Responsive ============ */
 

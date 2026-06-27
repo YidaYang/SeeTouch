@@ -9,6 +9,8 @@ const socket = io();
 let currentState = "idle";
 let stepHistory = [];        // StepData[]
 let activeStepIndex = -1;    // 当前显示的步骤(0-indexed in stepHistory)
+let thinkingTimerInterval = null;  // requestAnimationFrame ID for thinking timer
+let thinkingStartTime = 0;         // performance.now() when reasoning started
 
 // ======================== DOM 元素 ========================
 
@@ -46,6 +48,11 @@ const els = {
     btnStop:         $("btnStop"),
     timeline:        $("timeline"),
     toastContainer:  $("toastContainer"),
+    reasoningOverlay: $("reasoningOverlay"),
+    thinkingTimer:   $("thinkingTimer"),
+    logContainer:    $("logContainer"),
+    logAutoScroll:   $("logAutoScroll"),
+    btnClearLog:     $("btnClearLog"),
 };
 
 // ======================== WebSocket 事件 ========================
@@ -65,6 +72,7 @@ socket.on("status", (data) => {
 });
 
 socket.on("step_result", (data) => {
+    hideThinkingOverlay();
     stepHistory.push(data);
     activeStepIndex = stepHistory.length - 1;
     renderStepData(data);
@@ -85,6 +93,14 @@ socket.on("task_finished", (data) => {
 
 socket.on("error", (data) => {
     showToast(data.message, "error");
+});
+
+socket.on("step_progress", (data) => {
+    handleStepProgress(data);
+});
+
+socket.on("log", (data) => {
+    appendLogEntry(data);
 });
 
 // ======================== 按钮事件 ========================
@@ -157,6 +173,74 @@ function startTask(mode) {
         });
     };
     waitForReady();
+}
+
+// ======================== 步骤进度(实时反馈) ========================
+
+function handleStepProgress(data) {
+    const phase = data.phase;
+
+    if (phase === "screenshot_taken") {
+        // 立即显示新截图
+        renderScreenshotOnly(data.screenshot_b64);
+        els.stepIndicator.textContent = `Step ${data.step}`;
+        // 显示思考覆盖层 + 启动计时器
+        showThinkingOverlay();
+    } else if (phase === "reasoning_done") {
+        // 隐藏思考覆盖层
+        hideThinkingOverlay();
+        // 在截图上画动作标注
+        if (data.action_type && data.action_params) {
+            drawActionOnCurrentScreenshot(data.action_type, data.action_params);
+        }
+    } else if (phase === "executing") {
+        // 可选:未来可以在这里加执行中的视觉提示
+    }
+}
+
+function renderScreenshotOnly(b64) {
+    const canvas = els.screenshotCanvas;
+    const ctx = canvas.getContext("2d");
+    const img = new Image();
+    img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        els.screenshotPlaceholder.style.display = "none";
+        canvas.style.display = "block";
+    };
+    img.src = "data:image/jpeg;base64," + b64;
+}
+
+function drawActionOnCurrentScreenshot(actionType, actionParams) {
+    const canvas = els.screenshotCanvas;
+    const ctx = canvas.getContext("2d");
+    drawActionOverlay(ctx, {
+        action_type: actionType,
+        action_params: actionParams,
+    }, canvas.width, canvas.height);
+}
+
+function showThinkingOverlay() {
+    els.reasoningOverlay.style.display = "flex";
+    thinkingStartTime = performance.now();
+    els.thinkingTimer.textContent = "0.0s";
+    // 用 requestAnimationFrame 更新计时器
+    function updateTimer() {
+        if (els.reasoningOverlay.style.display === "none") return;
+        const elapsed = (performance.now() - thinkingStartTime) / 1000;
+        els.thinkingTimer.textContent = elapsed.toFixed(1) + "s";
+        thinkingTimerInterval = requestAnimationFrame(updateTimer);
+    }
+    thinkingTimerInterval = requestAnimationFrame(updateTimer);
+}
+
+function hideThinkingOverlay() {
+    els.reasoningOverlay.style.display = "none";
+    if (thinkingTimerInterval) {
+        cancelAnimationFrame(thinkingTimerInterval);
+        thinkingTimerInterval = null;
+    }
 }
 
 // ======================== 状态管理 ========================
@@ -279,6 +363,7 @@ function resetInfoPanel() {
     els.tokensIn.textContent = "—";
     els.tokensOut.textContent = "—";
     els.thinkingMetric.style.display = "none";
+    hideThinkingOverlay();
 }
 
 // ======================== 截图 Canvas + 标注 ========================
@@ -403,6 +488,49 @@ function addTimelineStep(data) {
     // 自动滚到最新
     els.timeline.scrollLeft = els.timeline.scrollWidth;
 }
+
+// ======================== 日志面板 ========================
+
+const MAX_LOG_ENTRIES = 500;
+
+function appendLogEntry(data) {
+    const container = els.logContainer;
+    const entry = document.createElement("div");
+    entry.className = `log-entry level-${data.level}`;
+
+    // 格式化时间为 HH:MM:SS.mmm
+    const ts = new Date(data.timestamp * 1000);
+    const timeStr = ts.toTimeString().substring(0, 8) + "." +
+        String(ts.getMilliseconds()).padStart(3, "0");
+
+    // 从完整 module name 取最后一段
+    const shortName = data.name ? data.name.split(".").pop() : "";
+
+    entry.innerHTML =
+        `<span class="log-time">${timeStr}</span>` +
+        `<span class="log-level">${escapeHtml(data.level)}</span>` +
+        `<span class="log-name">${escapeHtml(shortName)}</span>` +
+        `${escapeHtml(data.message.replace(/^.*?\s+\S+\s+\S+:\s*/, ""))}`;
+
+    container.appendChild(entry);
+
+    // 超出上限时移除最早的
+    while (container.children.length > MAX_LOG_ENTRIES) {
+        container.removeChild(container.firstChild);
+    }
+
+    // 自动滚动
+    if (els.logAutoScroll.checked) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+function clearLog() {
+    els.logContainer.innerHTML = "";
+}
+
+// 全局暴露给 HTML onclick
+window.clearLog = clearLog;
 
 // ======================== 工具函数 ========================
 

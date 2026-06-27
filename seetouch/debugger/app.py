@@ -18,6 +18,7 @@ from flask import Flask, send_from_directory
 from flask_socketio import SocketIO
 
 from ..config import AppSettings, load_env
+from ..core.event_bus import EventBus
 from ..core.runner import Runner
 from ..device.android.controller import AndroidController
 from ..logging_config import configure_logging
@@ -85,14 +86,18 @@ def create_app(settings: AppSettings | None = None) -> tuple[Flask, SocketIO]:
             # 后续可以改为 WebSocket 双向确认。
             guard = Guard(prompt_fn=lambda msg: True)
 
+            # 创建事件总线(生命周期与任务绑定)
+            event_bus = EventBus()
+
             runner = Runner(
                 device=device,
                 reasoner=reasoner,
                 guard=guard,
                 runs_dir=settings.runs_dir if settings else "runs",
+                event_bus=event_bus,
             )
 
-            debug_session = DebugSession(runner)
+            debug_session = DebugSession(runner, event_bus=event_bus)
 
             # 设置回调
             def on_step_result(step_data: StepData):
@@ -107,10 +112,18 @@ def create_app(settings: AppSettings | None = None) -> tuple[Flask, SocketIO]:
             def on_state_change(state: str):
                 socketio.emit("status", {"state": state})
 
+            def on_step_progress(data: dict):
+                socketio.emit("step_progress", data)
+
+            def on_log(data: dict):
+                socketio.emit("log", data)
+
             debug_session.on_step_result = on_step_result
             debug_session.on_task_finished = on_task_finished
             debug_session.on_error = on_error
             debug_session.on_state_change = on_state_change
+            debug_session.on_step_progress = on_step_progress
+            debug_session.on_log = on_log
 
             debug_session.start_task(instruction, max_steps=max_steps)
             socketio.emit("status", {"state": debug_session.state})
