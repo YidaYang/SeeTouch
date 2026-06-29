@@ -291,6 +291,42 @@ EventBus() → Runner(event_bus=bus) + DebugSession(runner, event_bus=bus)
 
 ---
 
+## 动作后 settle delay（2026-06-30 新增）
+
+### 设计初衷
+
+真机测试发现模型"保险性重复点击"（如 B 站搜索时 step 4-5 反复点搜索框），根因不是模型保守，而是 **Runner 执行动作后立刻截图，拿到的是旧画面**——模型看到界面没变化，合理地判断"上一步没生效"。
+
+u2 的 `click()`/`swipe()`/`press()` 等调用完成即返回（设备层操作是同步的），但 **Android 界面响应需要时间**：页面跳转、动画播放、内容加载、惯性滚动都不是瞬时的。
+
+### 实现
+
+Runner 新增 `action_settle_seconds` 参数（默认 1.0s），在 `_execute()` 成功后、下一轮截图前 sleep：
+
+```python
+if success and out.action.type not in (ACTION_WAIT, ACTION_COMPLETE):
+    time.sleep(self.action_settle_seconds)
+```
+
+**条件守卫：**
+- WAIT：本身就是 sleep，不再加
+- COMPLETE：不执行设备动作（且 COMPLETE 在 step() 前面已经 return）
+- success=False：设备报错了，等也没意义
+
+**统一等待逻辑：** 同时移除 `controller.py` 中 `open_app()` 的硬编码 `time.sleep(1.0)`，等待逻辑收到 Runner 层统一管理。device 层只负责执行操作本身，不管"等多久给模型截图"。
+
+**计时归属：** settle delay 不算进 `execution_time`——sleep 加在 `execution_time = time.perf_counter() - t1` 之后，保持 `execution_time` 反映设备动作真实耗时。
+
+### 默认值选择
+
+1.0 秒。理由：与 OPEN 原来硬编码的值一致且验证过够用；真正需要等久的场景由模型自行输出 WAIT。可通过构造参数调整。
+
+**Why：** 操作后截图拿到旧画面是系统性 bug——每一步都可能浪费一次推理调用，直接拉低任务效率和成功率。
+
+**How to apply：** 后续如果发现特定动作需要更长/更短的 settle 时间，可按动作类型做差异化（如 SCROLL 等惯性滚动结束可能需要更长），但先用统一值验证。
+
+---
+
 ## 相关记忆
 
 - [[product_overview.md]] — 产品定位、核心能力

@@ -107,8 +107,6 @@ class AndroidController:
     def open_app(self, name_or_package: str) -> None:
         """通过 AppLauncher 走四级 fallback;L4 时 raise OpenAppNeedsVisual。"""
         self._launcher.open(name_or_package)
-        # 给 app 启动一些时间
-        time.sleep(1.0)
 
     def go_home(self) -> None:
         self._d.press("home")

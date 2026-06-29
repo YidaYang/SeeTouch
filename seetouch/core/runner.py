@@ -66,6 +66,7 @@ class Runner:
         max_consecutive_failures: int = 2,
         max_consecutive_identical_actions: int = 3,
         event_bus: EventBus | None = None,
+        action_settle_seconds: float = 1.0,
     ):
         self.device = device
         self.reasoner = reasoner
@@ -74,6 +75,7 @@ class Runner:
         self.max_consecutive_failures = max_consecutive_failures
         self.max_consecutive_identical_actions = max_consecutive_identical_actions
         self._event_bus = event_bus
+        self.action_settle_seconds = action_settle_seconds
 
         # 运行状态(start() 初始化,step() 推进)
         self._session: Session | None = None
@@ -235,6 +237,11 @@ class Runner:
             notes.append(f"unexpected_error: {type(exc).__name__}: {exc}")
             success = False
         execution_time = time.perf_counter() - t1
+
+        # 等待手机界面响应动作后稳定(页面跳转/动画/内容加载),
+        # 避免下一轮截图拿到旧画面导致模型误判重复操作。
+        if success and out.action.type not in (ACTION_WAIT, ACTION_COMPLETE):
+            time.sleep(self.action_settle_seconds)
 
         # 6. 视觉兜底命中检测
         if self._pending_visual_request and out.action.type != ACTION_OPEN:

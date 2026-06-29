@@ -156,6 +156,18 @@ metadata:
   - 无 EventBus 时（CLI `run()` 路径、旧测试）零开销，所有 emit 走 `if self._event_bus:` 守卫
 - **验证**: 65 个测试全绿（原 45 + 新增 20），0 回归。真机端到端验证待用户接设备确认。
 
+### 2026-06-30：动作后等待手机响应（settle delay）
+
+- **动机**: 发现 Runner 执行动作（CLICK/SCROLL/TYPE/BACK）后立刻截图，拿到的是操作前的旧画面或过渡态动画帧，导致模型误判"上一步没生效"而重复操作。这也是之前记录的"模型保险性重复点击"的真正根因。
+- **变更**:
+  - `core/runner.py`：Runner 新增 `action_settle_seconds` 参数（默认 1.0s），在 `_execute()` 成功后、下一轮截图前 sleep，让手机界面稳定。WAIT/COMPLETE 和执行失败时跳过。
+  - `device/android/controller.py`：移除 `open_app()` 里硬编码的 `time.sleep(1.0)`，等待逻辑统一收到 Runner 层管理。
+- **设计决策**:
+  - settle delay 不算进 `execution_time`（保持 execution_time 反映设备动作本身耗时）
+  - 默认 1.0s（与 OPEN 原来硬编码的值一致，覆盖绝大多数页面跳转/动画场景）
+  - 真正需要等久的场景（app 启动加载）由模型自行输出 WAIT
+- **验证**: 65 个测试全绿，0 回归。
+
 ## 重大 bug 复盘
 
 ### 调试器不显示思维链（2026-06-26）
