@@ -1,33 +1,53 @@
 # SeeTouch Android
 
-SeeTouch 的 Android 端工程。当前阶段是 **helper APK**（Stage 1）：为 PC 端提供"桌面应用名 → package"权威索引；所有组件都按"将来长进独立 on-device 主 App"的标准设计。
+SeeTouch 的 Android 端工程：**独立不依赖电脑的 on-device GUI Agent 主 App**，同时保留 helper APK 能力（连接电脑时可导出应用索引）。
+
+架构为 Chaquopy 混合方案：CPython 3.12 嵌入 APK，`seetouch/` Python 包（core/reasoning/perception/safety）原封不动跑在手机上；仅设备交互层（无障碍服务手势/截图）与 UI（Compose）用 Kotlin。Gradle sourceSet 直接指向仓库根的 `seetouch/`，PC 端 Python 代码更新后**重新构建 APK 即同步，零移植**。
 
 ## 模块结构
 
 ```
 app/src/main/java/com/seetouch/app/
-├── appindex/    # 应用索引领域层（主 App 直接复用）
-│   ├── AppEntry.kt                      # 单条应用记录
-│   ├── AppIndexProvider.kt              # 数据源抽象
-│   ├── PackageManagerAppIndexProvider.kt # PackageManager 实现
-│   └── AppIndexJson.kt                  # 版本化 JSON 序列化（schema_version）
-├── export/      # 导出通道层（可插拔）
-│   ├── AppIndexExporter.kt              # 通道抽象
-│   ├── FileAppIndexExporter.kt          # 文件通道（tmp → rename + .done 标记）
-│   └── LogcatAppIndexExporter.kt        # logcat 兜底通道（base64 分块）
-└── helper/      # PoC 阶段的 ADB 桥接壳（主 App 阶段可弃用）
-    └── AppListExportActivity.kt         # exported 透明 Activity
+├── SeeTouchApplication.kt   # Python 运行时初始化 + DeviceBridge 注入
+├── ui/          # Compose UI（任务页/实时时间线/敏感动作确认弹窗/设置页）
+├── task/        # 任务状态机
+│   ├── TaskState.kt             # TaskStatus / StepInfo / TaskUiState
+│   ├── TaskController.kt        # 单例 StateFlow,Python 回调 → UI 状态
+│   └── TaskExecutionService.kt  # 前台 Service,承载任务线程
+├── settings/    # AppSettings(API key/模型/最大步数/thinking 开关)
+├── device/      # SeeTouchAccessibilityService(手势注入/截图/前台包名)
+├── bridge/      # DeviceBridge:Python↔Kotlin 唯一门面
+├── appindex/    # 应用索引领域层(helper 与主 App 共用;OPEN L1.5 复用)
+├── export/      # helper 导出通道(文件 + logcat 兜底)
+├── helper/      # ADB 桥接壳(helper 模式入口)
+└── diag/        # 诊断入口(Python 自检 / 无 UI 任务执行)
+
+app/src/main/python/seetouchapp/
+├── task_entry.py   # run_task():Kotlin → Runner 的任务入口
+└── selftest.py     # 设备上 Python 环境自检
 ```
 
-## 构建
+## 本地编译
+
+前置：Android Studio（或命令行 SDK），SDK Platform 36 + Build-Tools；首次构建会自动下载 Chaquopy 的 Python 3.12 运行时和 pip 依赖（openai/pydantic/httpx/pillow），需联网，耗时较长。
 
 ```bash
 cd android
 ./gradlew assembleDebug
-# 产物: app/build/outputs/apk/debug/app-debug.apk
+# 产物: app/build/outputs/apk/debug/app-debug.apk (~65MB,含 CPython)
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## 使用（PC 端）
+也可直接用 Android Studio 打开 `android/` 文件夹点 Run。
+
+## 用法一：独立 App（不依赖电脑）
+
+1. 安装 APK 后，在系统设置 → 无障碍 中开启「SeeTouch」服务（App 内有跳转按钮）
+2. 打开 SeeTouch → 右上角齿轮进设置页，填入豆包 API key（可选：模型 ID、最大步数、深度思考开关），保存
+3. 回任务页输入自然语言指令（如「打开设置」「在哔哩哔哩搜索采莲曲」）→ 点「开始执行」
+4. App 自动回桌面开始执行；执行由前台 Service 承载，通知栏可见。回到 SeeTouch 可看实时步骤时间线；遇敏感动作（支付/删除等）会弹确认框，5 分钟未确认默认拒绝
+
+## 用法二：helper 模式（连接电脑导出应用索引）
 
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -40,7 +60,7 @@ adb shell am start -n com.seetouch.app/.helper.AppListExportActivity
 adb pull /sdcard/Android/data/com.seetouch.app/files/applist.json
 ```
 
-## 导出协议
+## 导出协议（helper）
 
 ### 文件通道（默认）
 
@@ -83,7 +103,16 @@ END <payload 字节数>
 
 字段变更时递增 `schema_version`，不要原地改语义。
 
-## 后续演进（见 memory/future_roadmap.md）
+## OPEN 策略（on-device）
 
-- **Stage 2**：PC 端 `seetouch/device/android/app_index.py` 集成本索引，作为 OPEN 启动策略的 L0.5 层
-- **Stage 3**：on-device 主 App —— `appindex/`、`export/` 直接复用，`helper/` 桥接壳由 App 内直接调用 `AppIndexProvider` 替代
+App 内 OPEN 动作分级 fallback：learned cache → L1 静态表 → L1' alias → **L1.5 label（PackageManager 应用显示名精确匹配，复用 appindex/）** → L2 包名直通 → L4 视觉兜底。详见 `seetouch/device/android/app_launcher.py`。
+
+## 诊断入口（ADB）
+
+```bash
+# Python 环境自检
+adb shell am start -n com.seetouch.app/.diag.PythonSelfTestActivity
+# 无 UI 任务执行(logcat tag SEETOUCH_RUN)
+adb shell am start -n com.seetouch.app/.diag.TaskRunActivity \
+    --es instruction "打开设置" --es api_key "<DOUBAO_API_KEY>"
+```

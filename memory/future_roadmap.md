@@ -17,9 +17,9 @@ metadata:
 
 **Why：** 产品需要独立性和便携性，PC 端控制只是验证阶段的权宜之计。
 
-**当前状态：** PoC 原型（PC + uiautomator2 + ADB），用于快速验证 reasoning / OPEN / 动作闭环核心逻辑。
+**当前状态：** ✅ **已落地（2026-07-05，Chaquopy 混合架构 Phase 0-3 全部完成）**。CPython 3.12 嵌入 APK，`seetouch/` Python 包原封不动跑在手机上；无障碍服务设备层 + Compose UI + 前台 Service；模拟器端到端验证通过，待真机（Xiaomi Android 12）回归。PC 端 PoC（uiautomator2 + ADB）仍保留作开发调试用。
 
-**How to apply：** 写 Android 原生代码（PackageManager、Accessibility、截图、手势注入）是产品主线方向，不是绕路。PoC 阶段在手机端部署的任何 helper 组件，都按"将来要长进主 App"的标准设计。
+**Python 更新同步机制：** Gradle sourceSet 直接指向仓库根 `seetouch/`，PC 端改完 Python 重新 `./gradlew assembleDebug` 即同步，零移植。
 
 ---
 
@@ -48,10 +48,10 @@ metadata:
 - `AppLauncher` 新增 L0.5 层：learned cache 和 L1 静态表之间插入 AppIndex 查询
 - 静态表保留（快速路径 + 兜底）
 
-#### Stage 3：最终迁移（on-device APP 时）
-- helper APK 逻辑直接长进主 App（Kotlin Service / Helper 类）
-- AppIndex 改为直接调用 PackageManager API，不再走 ADB
-- 持久化：`~/.seetouch/learned_apps.json` → App 内部存储
+#### Stage 3：最终迁移（on-device APP 时） ✅（2026-07-05 已完成）
+- `AppLauncher` 新增可选 `label_resolver` 注入点（L1.5，仅精确匹配）；`DeviceBridge.packageForLabel` 复用 `PackageManagerAppIndexProvider` 直接调 PackageManager，不走 ADB
+- 持久化：learned cache 写入 App 内部存储（HOME 指向 filesDir）
+- 注：Stage 2（PC 端集成 helper 索引）被跳过——on-device 版直接到位；PC 端如需可后补
 
 **构建环境要求：**
 - 本机仅 JDK 17，无 Android SDK / Gradle / Studio

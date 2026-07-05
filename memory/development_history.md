@@ -209,6 +209,20 @@ metadata:
 - **验证**（云端 Pixel 6 模拟器 / Android 14）: file/logcat 双通道数据一致；zh-CN locale 下中文应用名正确（设置/相机/云端硬盘）；待真机（Xiaomi）回归。
 - **下一步**: Stage 2 —— `device/android/app_index.py` 集成为 OPEN 策略 L0.5 层。
 
+### 2026-07-05：on-device 独立 App 落地（Chaquopy 混合架构，Phase 0-3 全部完成）
+
+用户确认三项决策：① Chaquopy 混合方案 ② minSdk 26→30（用 `AccessibilityService.takeScreenshot`，免 MediaProjection）③ 必要时可降 AGP（实际无需，Chaquopy 17.0 官方支持 AGP 9.2）。
+
+- **Phase 0 技术验证（commit `86350d2`）**: Chaquopy 17.0 嵌入 CPython 3.12；`sourceSet.srcDir` 直接指向仓库根 `seetouch/`（Python 更新→重新构建即同步，零移植）；pip: openai 1.30.0 / pydantic 1.10.22 / httpx 0.27.2 / pillow。模拟器自检全绿 + 真实 Doubao 推理跑通。APK ~54MB。
+- **Phase 1 设备层闭环（commit `741d8cf`）**: `device/SeeTouchAccessibilityService`（dispatchGesture 点击滑动 / takeScreenshot / ACTION_SET_TEXT 中文输入 / 前台包名跟踪）+ `bridge/DeviceBridge`（Python↔Kotlin 唯一门面，全静态方法）+ `seetouch/device/android_native/controller.py`（实现 DeviceController Protocol）。无 UI 跑通"打开设置"2 步端到端。
+  - **坑 1**: Chaquopy 里 `java.util.List` 不可迭代 → DeviceBridge 返回 `Array<String>`
+  - **坑 2**: `go_home()` 返回时窗口事件未到，`current_app()` 读到旧前台 → 视觉兜底 baseline 误学 launcher 包名；`go_home()` 后加 0.6s sleep
+- **Phase 2 Compose UI + 前台 Service（commit `90d6006`）**: `task/TaskController`（单例 StateFlow<TaskUiState>，Python step/confirm 回调 → UI）、`task/TaskExecutionService`（前台服务 specialUse 子类型，任务线程）、`ui/MainActivity`（任务输入 + 实时步骤时间线 + 敏感动作确认弹窗(5 分钟超时默认拒绝) + 设置页）、`settings/AppSettings`（API key/模型 ID/最大步数/thinking 开关，与 PC 端 .env 可配置项对齐）。`run_task` 改为 config JSON 传参。
+  - **关键发现**: agent 与手机同机运行，任务启动时首张截图是 SeeTouch 自己的界面，模型误判"应用正在处理"反复 WAIT 直到 stuck_loop 中止 → `task_entry` 在 runner 启动前先 `go_home()`
+- **Phase 3 OPEN 接入 on-device 应用索引（commit `636df1c`）**: `AppLauncher` 新增可选 `label_resolver` 注入点（L1.5，仅精确匹配禁止模糊）；`DeviceBridge.packageForLabel` 复用 helper 的 `PackageManagerAppIndexProvider` 按显示名 trim+忽略大小写匹配。OPEN 层级变为 learned → L1 表 → L1' alias → **L1.5 label** → L2 直通 → L4 视觉兜底。
+- **验证**（云端 Pixel 6 模拟器 / Android 14）: UI 全流程 "Open Clock" 3 步完成（OPEN→WAIT→COMPLETE），'时钟' 经 L1.5 命中 `com.google.android.deskclock` 免视觉兜底；时间线实时渲染、完成/中止状态、设置页读写均正常。PC 端 64 单测全绿。待真机（Xiaomi Android 12）回归。
+- **helper 模式保留**: AppListExportActivity 原样可用，同一 APK 双模式。
+
 ## 重大 bug 复盘
 
 ### 调试器不显示思维链（2026-06-26）
