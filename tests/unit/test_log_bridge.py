@@ -118,3 +118,69 @@ def test_log_bridge_does_not_capture_outside_seetouch():
     seetouch_msgs = [r for r in received if "seetouch" not in r.get("name", "")]
     # 即使被捕获,也不应该有 other_package 的日志
     assert len(seetouch_msgs) == 0
+
+
+def test_log_bridge_sets_propagate_false():
+    """安装 LogBridge 后,seetouch logger 的 propagate 应为 False。"""
+    bus = EventBus()
+    bridge = LogBridge(bus)
+
+    target = logging.getLogger("seetouch")
+    original = target.propagate
+
+    bridge.install()
+    assert target.propagate is False
+
+    bridge.uninstall()
+    assert target.propagate == original
+
+
+def test_log_bridge_no_duplicate_with_root_handler():
+    """即使 root logger 有 handler,每条日志也只触发一次 EventBus LOG 事件。"""
+    bus = EventBus()
+    received = []
+    bus.subscribe(LOG, lambda **kw: received.append(kw))
+
+    # 模拟 configure_logging:root 上挂一个 handler
+    root = logging.getLogger()
+    import io as _io
+    fake_stream = _io.StringIO()
+    root_handler = logging.StreamHandler(fake_stream)
+    root.addHandler(root_handler)
+    original_level = root.level
+    root.setLevel(logging.DEBUG)
+
+    try:
+        bridge = LogBridge(bus)
+        bridge.install()
+
+        logger = logging.getLogger("seetouch.test_no_dup")
+        logger.setLevel(logging.DEBUG)
+        logger.info("should appear exactly once")
+
+        bridge.uninstall()
+
+        # 关键断言:EventBus 只收到一条,不是两条
+        assert len(received) == 1
+        assert "should appear exactly once" in received[0]["message"]
+    finally:
+        root.removeHandler(root_handler)
+        root.setLevel(original_level)
+
+
+def test_log_bridge_stderr_handler_lifecycle():
+    """install 时添加 stderr handler,uninstall 时移除。"""
+    bus = EventBus()
+    bridge = LogBridge(bus)
+
+    target = logging.getLogger("seetouch")
+    handlers_before = len(target.handlers)
+
+    bridge.install()
+    # 应新增 2 个 handler:EventBusLogHandler + StreamHandler
+    assert len(target.handlers) == handlers_before + 2
+
+    bridge.uninstall()
+    # 应恢复到原始数量
+    assert len(target.handlers) == handlers_before
+

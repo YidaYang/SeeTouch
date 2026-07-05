@@ -56,6 +56,11 @@ class LogBridge:
     - ``uninstall()`` 在任务结束 / stop 时调用
 
     支持重复 install/uninstall(幂等),不会泄露 Handler。
+
+    安装时会将 seetouch logger 的 propagate 设为 False,防止日志记录
+    同时经 EventBus handler 和 root logger handler 两条链路传播,
+    导致前端日志面板显示重复条目。同时会挂一个 StreamHandler 到
+    seetouch logger 以保持 stderr 输出。
     """
 
     # 挂载到 seetouch 命名空间的根 logger,这样 runner、device、
@@ -69,13 +74,31 @@ class LogBridge:
             logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s")
         )
         self._installed = False
+        self._stderr_handler: logging.Handler | None = None
+        self._original_propagate: bool = True
 
     def install(self) -> None:
-        """把 Handler 挂到 seetouch logger。幂等。"""
+        """把 Handler 挂到 seetouch logger。幂等。
+
+        同时关闭 propagate 以隔离 seetouch 日志链路,避免同一条
+        LogRecord 通过 root logger 二次传播导致前端日志重复。
+        """
         if self._installed:
             return
         target_logger = logging.getLogger(self._LOGGER_NAME)
         target_logger.addHandler(self._handler)
+
+        # 关闭向上传播,防止 root logger 的 handler 二次处理同一条日志
+        self._original_propagate = target_logger.propagate
+        target_logger.propagate = False
+
+        # 挂一个 StreamHandler 到 seetouch logger,保持 stderr 输出
+        self._stderr_handler = logging.StreamHandler()
+        self._stderr_handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+        )
+        target_logger.addHandler(self._stderr_handler)
+
         self._installed = True
 
     def uninstall(self) -> None:
@@ -84,4 +107,11 @@ class LogBridge:
             return
         target_logger = logging.getLogger(self._LOGGER_NAME)
         target_logger.removeHandler(self._handler)
+
+        # 恢复 propagate 和移除 stderr handler
+        target_logger.propagate = self._original_propagate
+        if self._stderr_handler:
+            target_logger.removeHandler(self._stderr_handler)
+            self._stderr_handler = None
+
         self._installed = False
