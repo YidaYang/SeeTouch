@@ -7,7 +7,7 @@ metadata:
 
 # 开发历程
 
-更新时间：2026-06-19
+更新时间：2026-07-05
 
 ---
 
@@ -167,6 +167,33 @@ metadata:
   - 默认 1.0s（与 OPEN 原来硬编码的值一致，覆盖绝大多数页面跳转/动画场景）
   - 真正需要等久的场景（app 启动加载）由模型自行输出 WAIT
 - **验证**: 65 个测试全绿，0 回归。
+
+### 2026-07-05：调试器日志重复修复
+
+- **动机**: 调试器右侧日志面板中，相同的日志条目会显示两遍。
+- **根因**: `LogBridge` 把 `_EventBusLogHandler` 挂在 `seetouch` logger 上，但 Python logging 默认 `propagate=True`，同一条 LogRecord 会沿 logger 层级向上传播到 root logger。在 Flask-SocketIO `threading` async_mode 下，propagation 链路中的副作用（transport 层消息双发 / 回调重入）导致前端收到两份。
+- **修复（commit `2c3a4bf`）**:
+  - `LogBridge.install()` 时将 `seetouch` logger 的 `propagate` 设为 `False`，完全隔离日志链路
+  - 同时在 `seetouch` logger 上挂一个 `StreamHandler`，保持 stderr 终端输出
+  - `uninstall()` 时恢复 `propagate` 原始值并移除 `StreamHandler`
+- **验证**: 69 个测试全绿（原 65 + 新增 4），0 回归。新增 3 个 LogBridge 测试：propagate 隔离验证、root handler 存在时无重复、stderr handler 生命周期。
+
+### 2026-07-05：调试器步骤渐进式渲染
+
+- **动机**: 原先前端在整步执行完毕收到 `step_result` 后才创建步骤页面，推理期间（5-12 秒）信息面板还停留在上一步的数据，用户体验差。正确的逻辑应该是截图完成就新建步骤页面，显示截图和思考动画，推理完成后填充 prompt / 动作 / 思维链，执行完成后补充执行结果。
+- **变更（commit `31ca0d5`）**:
+  - `core/runner.py`：`STEP_REASONING_DONE` 事件扩展，新增 `prompt_text`、`raw_output`、`reasoning_content`、`screen_summary`、`action_summary`、`usage` 字段
+  - `debugger/debug_session.py`：`_on_reasoning_done` 转发新增字段到前端
+  - `debugger/static/app.js`：三阶段渐进渲染
+    - `screenshot_taken` → 新建步骤（时间线 pending 条目 + 重置面板 + 显示截图 + 思考动画）
+    - `reasoning_done` → 填充推理结果（action、prompt、思维链、model output、metrics，执行结果标为"⏳ 执行中"）
+    - `step_result` → 收尾（执行结果 success/failure、execution_time、notes、最终 usage）
+  - `debugger/static/style.css`：新增 `.timeline-step.pending` 脉冲动画
+- **设计决策**:
+  - prompt 在 `reasoning_done` 阶段才可用（它在 `reasoner.predict()` 内部构建），不在截图阶段显示
+  - `step_result` 从"创建步骤"变成"更新已有步骤"，前端用 `activeStepIndex` 关联
+  - 时间线步骤先以 pending 状态展示（蓝色脉冲动画），`step_result` 到来后 finalize 为 success/failure/terminal
+- **验证**: 69 个测试全绿，0 回归。新增 1 个测试：验证 `reasoning_done` 事件包含扩展字段。
 
 ## 重大 bug 复盘
 

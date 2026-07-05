@@ -7,7 +7,7 @@ metadata:
 
 # SeeTouch 产品概览
 
-更新时间：2026-06-19
+更新时间：2026-07-05
 
 ---
 
@@ -141,12 +141,14 @@ metadata:
 | 2026-06-26 | 调试器展示模型思维链（reasoning_content 端到端透传） | c84f935 |
 | 2026-06-27 | 调试器实时反馈增强（EventBus + 思考动画 + 日志面板） | - |
 | 2026-06-30 | 动作后 settle delay（修复截图拿旧画面导致重复操作） | - |
+| 2026-07-05 | 调试器日志重复修复（LogBridge propagate 隔离） | 2c3a4bf |
+| 2026-07-05 | 调试器步骤渐进式渲染（截图即建页面，推理完填充，执行完收尾） | 31ca0d5 |
 
 ---
 
 ## 测试覆盖
 
-- 65 单元测试（parser、screen、app_launcher、guard、runner-with-mock、event_bus、log_bridge、runner_events）
+- 69 单元测试（parser、screen、app_launcher、guard、runner-with-mock、event_bus、log_bridge、runner_events）
 - 真机集成测试（Xiaomi rubens / Android 12 / 1440×3200 / 447 包）
 - 覆盖场景：OPEN 五级 fallback、视觉学习、死循环检测、敏感动作拦截
 
