@@ -10,6 +10,14 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.SeeTouch" />
+        android:theme="@style/Theme.SeeTouch">
+
+        <!-- PC 端 ADB 触发的应用索引导出入口，无桌面图标、透明不打断前台 -->
+        <activity
+            android:name=".helper.AppListExportActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+    </application>
 
 </manifest>
