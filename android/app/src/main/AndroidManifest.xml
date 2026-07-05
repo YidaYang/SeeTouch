@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- VLM API 调用需要联网 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Android 11+ 包可见性:声明需要查询所有桌面可启动应用 -->
     <queries>
         <intent>
@@ -19,6 +22,13 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.SeeTouch">
+
+        <!-- Python 运行时自检(诊断用),ADB 触发,报告打到 logcat tag SEETOUCH_PY -->
+        <activity
+            android:name=".diag.PythonSelfTestActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <!-- PC 端 ADB 触发的应用索引导出入口，无桌面图标、透明不打断前台 -->
         <activity
