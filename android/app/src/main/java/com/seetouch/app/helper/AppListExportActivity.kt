@@ -19,6 +19,7 @@ import kotlin.concurrent.thread
  *
  * 可选 extra：
  *   --es channels "file,logcat"   导出通道，默认 file（失败自动兜底 logcat）
+ *   --es request_id "<uuid>"      回显到 .done 标记，PC 端用于区分新旧导出
  *
  * 导出完成后 PC 端 pull：
  *   adb pull /sdcard/Android/data/com.seetouch.app/files/applist.json
@@ -35,13 +36,14 @@ class AppListExportActivity : Activity() {
             ?.map { it.trim().lowercase() }
             ?.filter { it.isNotEmpty() }
             ?: listOf(CHANNEL_FILE)
+        val requestId = intent.getStringExtra(EXTRA_REQUEST_ID).orEmpty()
         thread(name = "seetouch-applist-export") {
-            runExport(channels)
+            runExport(channels, requestId)
             runOnUiThread { finish() }
         }
     }
 
-    private fun runExport(channels: List<String>) {
+    private fun runExport(channels: List<String>, requestId: String) {
         val payload = try {
             val entries = PackageManagerAppIndexProvider(this).queryLaunchableApps()
             AppIndexJson.serialize(entries)
@@ -53,7 +55,7 @@ class AppListExportActivity : Activity() {
 
         var fileExportFailed = false
         for (channel in channels) {
-            val exporter = createExporter(channel)
+            val exporter = createExporter(channel, requestId)
             if (exporter == null) {
                 Log.w(TAG, "unknown export channel: $channel")
                 continue
@@ -74,9 +76,10 @@ class AppListExportActivity : Activity() {
         }
     }
 
-    private fun createExporter(channel: String): AppIndexExporter? = when (channel) {
+    private fun createExporter(channel: String, requestId: String): AppIndexExporter? = when (channel) {
         CHANNEL_FILE -> FileAppIndexExporter(
             getExternalFilesDir(null) ?: filesDir,
+            requestId = requestId,
         )
         CHANNEL_LOGCAT -> LogcatAppIndexExporter()
         else -> null
@@ -85,6 +88,7 @@ class AppListExportActivity : Activity() {
     companion object {
         const val TAG = "SEETOUCH_HELPER"
         const val EXTRA_CHANNELS = "channels"
+        const val EXTRA_REQUEST_ID = "request_id"
         const val CHANNEL_FILE = "file"
         const val CHANNEL_LOGCAT = "logcat"
     }

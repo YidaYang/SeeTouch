@@ -17,6 +17,7 @@ import json
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 HELPER_PACKAGE = "com.seetouch.app"
@@ -35,11 +36,12 @@ def adb(serial: str | None, *args: str, timeout: float = 30.0) -> subprocess.Com
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
-def trigger_export(serial: str | None, channel: str) -> None:
+def trigger_export(serial: str | None, channel: str, request_id: str) -> None:
     result = adb(
         serial,
         "shell", "am", "start", "-n", HELPER_ACTIVITY,
         "--es", "channels", channel,
+        "--es", "request_id", request_id,
     )
     if result.returncode != 0 or "Error" in result.stdout + result.stderr:
         raise RuntimeError(
@@ -47,12 +49,17 @@ def trigger_export(serial: str | None, channel: str) -> None:
         )
 
 
-def wait_done_marker(serial: str | None, timeout_seconds: float = 30.0) -> dict:
+def wait_done_marker(
+    serial: str | None, request_id: str, timeout_seconds: float = 30.0,
+) -> dict:
+    """轮询 .done 标记,只认回显了本次 request_id 的标记(避免误读上次导出的旧标记)。"""
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         result = adb(serial, "shell", "cat", DEVICE_DONE)
         if result.returncode == 0 and result.stdout.strip().startswith("{"):
-            return json.loads(result.stdout.strip())
+            status = json.loads(result.stdout.strip())
+            if status.get("request_id") == request_id:
+                return status
         time.sleep(0.5)
     raise TimeoutError(f"等待 {DEVICE_DONE} 超时({timeout_seconds}s)")
 
@@ -123,13 +130,14 @@ def main() -> int:
     )
     args = parser.parse_args()
     out_path = Path(args.out)
+    request_id = uuid.uuid4().hex
 
-    print(f"[1/3] 触发导出(channel={args.channel})...")
-    trigger_export(args.serial, args.channel)
+    print(f"[1/3] 触发导出(channel={args.channel}, request_id={request_id})...")
+    trigger_export(args.serial, args.channel, request_id)
 
     if args.channel == "file":
         print("[2/3] 等待完成标记...")
-        status = wait_done_marker(args.serial)
+        status = wait_done_marker(args.serial, request_id)
         print(f"      {status}")
         print(f"[3/3] 拉取 {DEVICE_JSON} -> {out_path}")
         data = pull_json(args.serial, out_path)

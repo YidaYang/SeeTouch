@@ -10,11 +10,15 @@ import java.io.IOException
  * 写入协议（PC 端依赖，勿随意变更）：
  * 1. 先写临时文件 applist.json.tmp
  * 2. 原子 rename 为 applist.json
- * 3. 最后写 applist.json.done 标记（内容为状态 JSON）
+ * 3. 最后写 applist.json.done 标记（内容为状态 JSON，含回显的 request_id）
  *
- * PC 端轮询 .done 文件出现后再 pull applist.json，避免读到半截文件。
+ * PC 端轮询 .done 中出现自己的 request_id 后再 pull applist.json，
+ * 既避免读到半截文件，也避免误读上一次导出的旧标记。
  */
-class FileAppIndexExporter(private val directory: File) : AppIndexExporter {
+class FileAppIndexExporter(
+    private val directory: File,
+    private val requestId: String = "",
+) : AppIndexExporter {
 
     override val name: String = "file"
 
@@ -33,6 +37,7 @@ class FileAppIndexExporter(private val directory: File) : AppIndexExporter {
         }
         val status = JSONObject()
             .put("status", "ok")
+            .put("request_id", requestId)
             .put("count", payload.optInt("count"))
             .put("generated_at", payload.optString("generated_at"))
         doneFile.writeText(status.toString(), Charsets.UTF_8)
