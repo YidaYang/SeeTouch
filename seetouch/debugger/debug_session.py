@@ -338,7 +338,7 @@ class DebugSession:
     def _on_reasoning_done(
         self, step: int, action: Any, reasoning_time: float, **_kw: Any,
     ) -> None:
-        """推理完成:通知前端隐藏思考动画、画动作标注。"""
+        """推理完成:通知前端隐藏思考动画、画动作标注、显示推理结果。"""
         if self.on_step_progress:
             self.on_step_progress({
                 "phase": "reasoning_done",
@@ -346,6 +346,12 @@ class DebugSession:
                 "action_type": action.type,
                 "action_params": action.parameters,
                 "reasoning_time": round(reasoning_time, 2),
+                "prompt_text": _kw.get("prompt_text", ""),
+                "raw_output": _kw.get("raw_output", ""),
+                "reasoning_content": _kw.get("reasoning_content", ""),
+                "screen_summary": _kw.get("screen_summary", ""),
+                "action_summary": _kw.get("action_summary", ""),
+                "usage": _kw.get("usage"),
             })
 
     def _on_executing(self, step: int, action: Any, **_kw: Any) -> None:

@@ -156,6 +156,12 @@ class Runner:
             step=step,
             action=out.action,
             reasoning_time=reasoning_time,
+            prompt_text=out.prompt_text,
+            raw_output=out.raw_output,
+            reasoning_content=out.reasoning_content,
+            screen_summary=out.screen_summary,
+            action_summary=out.action_summary,
+            usage=out.usage,
         )
 
         logger.info(

@@ -73,11 +73,19 @@ socket.on("status", (data) => {
 
 socket.on("step_result", (data) => {
     hideThinkingOverlay();
-    stepHistory.push(data);
-    activeStepIndex = stepHistory.length - 1;
-    renderStepData(data);
-    addTimelineStep(data);
-    // 状态可能已经变了(stepping -> paused)
+    // step_result 是步骤的最终数据,更新(而非新建)当前活跃步骤
+    if (activeStepIndex >= 0 && activeStepIndex < stepHistory.length) {
+        stepHistory[activeStepIndex] = data;
+    } else {
+        // 兜底:如果 screenshot_taken 没来(不应该发生),仍然创建
+        stepHistory.push(data);
+        activeStepIndex = stepHistory.length - 1;
+        addTimelineStep(data);
+    }
+    // 用完整数据刷新面板(补充执行结果等 reasoning_done 阶段没有的信息)
+    renderStepResult(data);
+    // 更新时间线状态(从 pending 变为 success/failure/terminal)
+    finalizeTimelineStep(data);
     if (data.terminal) {
         updateState("finished");
     }
@@ -181,18 +189,45 @@ function handleStepProgress(data) {
     const phase = data.phase;
 
     if (phase === "screenshot_taken") {
-        // 立即显示新截图
-        renderScreenshotOnly(data.screenshot_b64);
+        // ---- 新步骤开始:创建步骤页面 ----
+        // 创建占位步骤数据并加入历史
+        const pendingData = {
+            step: data.step,
+            screenshot_b64: data.screenshot_b64,
+            action_type: "—",
+            action_params: {},
+            execution_success: null,
+            terminal: false,
+            terminal_reason: null,
+        };
+        stepHistory.push(pendingData);
+        activeStepIndex = stepHistory.length - 1;
+
+        // 重置信息面板
+        resetInfoPanel();
         els.stepIndicator.textContent = `Step ${data.step}`;
+
+        // 显示截图
+        renderScreenshotOnly(data.screenshot_b64);
+
+        // 在时间线上添加 pending 状态的步骤
+        addTimelineStep(pendingData, true);
+
         // 显示思考覆盖层 + 启动计时器
         showThinkingOverlay();
+
     } else if (phase === "reasoning_done") {
-        // 隐藏思考覆盖层
+        // ---- 推理完成:填充推理结果 ----
         hideThinkingOverlay();
+
         // 在截图上画动作标注
         if (data.action_type && data.action_params) {
             drawActionOnCurrentScreenshot(data.action_type, data.action_params);
         }
+
+        // 渐进式填充信息面板:动作、prompt、思维链、模型输出、metrics
+        renderReasoningResult(data);
+
     } else if (phase === "executing") {
         // 可选:未来可以在这里加执行中的视觉提示
     }
@@ -455,13 +490,15 @@ function drawActionOverlay(ctx, data, canvasW, canvasH) {
 
 // ======================== 时间线 ========================
 
-function addTimelineStep(data) {
+function addTimelineStep(data, pending = false) {
     const el = document.createElement("div");
     el.className = "timeline-step";
     el.textContent = data.step;
     el.dataset.index = stepHistory.length - 1;
 
-    if (data.terminal) {
+    if (pending) {
+        el.classList.add("pending");
+    } else if (data.terminal) {
         el.classList.add("terminal");
     } else if (data.execution_success === false) {
         el.classList.add("failure");
@@ -487,6 +524,110 @@ function addTimelineStep(data) {
 
     // 自动滚到最新
     els.timeline.scrollLeft = els.timeline.scrollWidth;
+}
+
+function finalizeTimelineStep(data) {
+    // 找到当前活跃步骤的时间线元素,更新其状态样式
+    const timelineSteps = els.timeline.querySelectorAll(".timeline-step");
+    const el = timelineSteps[activeStepIndex];
+    if (!el) return;
+
+    el.classList.remove("pending");
+    if (data.terminal) {
+        el.classList.add("terminal");
+    } else if (data.execution_success === false) {
+        el.classList.add("failure");
+    } else {
+        el.classList.add("success");
+    }
+}
+
+// ======================== 渐进式渲染 ========================
+
+function renderReasoningResult(data) {
+    // Action
+    els.actionType.textContent = data.action_type || "—";
+    els.actionParams.textContent = formatParams(data.action_params);
+
+    // Action Summary
+    els.actionSummary.textContent = data.action_summary || "";
+
+    // Screen Summary
+    els.screenSummary.textContent = data.screen_summary || "—";
+
+    // Prompt
+    els.promptText.textContent = data.prompt_text || "—";
+
+    // 思维链
+    if (data.reasoning_content) {
+        els.reasoningSection.style.display = "";
+        els.reasoningText.textContent = data.reasoning_content;
+    } else {
+        els.reasoningSection.style.display = "none";
+    }
+
+    // Model Output
+    els.rawOutputText.textContent = data.raw_output || "—";
+
+    // Metrics: reasoning time
+    els.reasoningTime.textContent = data.reasoning_time + "s";
+
+    // Metrics: tokens
+    if (data.usage) {
+        els.tokensIn.textContent = formatNumber(data.usage.input_tokens || 0);
+        els.tokensOut.textContent = formatNumber(data.usage.output_tokens || 0);
+        if (data.usage.reasoning_tokens) {
+            els.thinkingMetric.style.display = "";
+            els.tokensThinking.textContent = formatNumber(data.usage.reasoning_tokens);
+        } else {
+            els.thinkingMetric.style.display = "none";
+        }
+    }
+
+    // 执行结果先标为进行中
+    els.resultBadge.textContent = "⏳ 执行中";
+    els.resultBadge.className = "result-badge pending";
+    els.executionTime.textContent = "—";
+}
+
+function renderStepResult(data) {
+    // 执行结果(reasoning_done 阶段没有的信息)
+    if (data.execution_success === true) {
+        els.resultBadge.textContent = "✅ 成功";
+        els.resultBadge.className = "result-badge success";
+    } else if (data.execution_success === false) {
+        els.resultBadge.textContent = "❌ 失败";
+        els.resultBadge.className = "result-badge failure";
+    } else {
+        els.resultBadge.textContent = "⏸ 跳过";
+        els.resultBadge.className = "result-badge pending";
+    }
+
+    els.executionTime.textContent = data.execution_time + "s";
+    els.actionSummary.textContent = data.action_summary || "";
+    els.screenSummary.textContent = data.screen_summary || "—";
+
+    // Notes
+    if (data.notes && data.notes.length > 0) {
+        els.notesSection.style.display = "";
+        els.notesList.innerHTML = data.notes
+            .map(n => `<div class="note-item">${escapeHtml(n)}</div>`)
+            .join("");
+    } else {
+        els.notesSection.style.display = "none";
+    }
+
+    // 更新 usage(step_result 的 usage 可能更完整)
+    if (data.usage) {
+        els.tokensIn.textContent = formatNumber(data.usage.input_tokens || 0);
+        els.tokensOut.textContent = formatNumber(data.usage.output_tokens || 0);
+        if (data.usage.reasoning_tokens) {
+            els.thinkingMetric.style.display = "";
+            els.tokensThinking.textContent = formatNumber(data.usage.reasoning_tokens);
+        } else {
+            els.thinkingMetric.style.display = "none";
+        }
+    }
 }
 
 // ======================== 日志面板 ========================

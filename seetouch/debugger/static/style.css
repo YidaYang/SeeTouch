@@ -689,6 +689,17 @@ html, body {
     color: var(--accent-purple);
 }
 
+.timeline-step.pending {
+    border-color: rgba(91, 158, 244, 0.5);
+    color: var(--accent-blue);
+    animation: pending-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pending-pulse {
+    0%, 100% { border-color: rgba(91, 158, 244, 0.3); }
+    50% { border-color: rgba(91, 158, 244, 0.8); box-shadow: 0 0 6px rgba(91, 158, 244, 0.3); }
+}
+
 /* ============ Toast Notifications ============ */
 
 .toast-container {

@@ -183,3 +183,44 @@ def test_complete_action_does_not_emit_executing():
     runner.step()
 
     assert len(executing_called) == 0
+
+
+def test_reasoning_done_includes_extended_fields():
+    """reasoning_done 事件应包含 prompt_text、raw_output 等渐进渲染所需字段。"""
+    out = ActionOutput(
+        action=Action(type=ACTION_CLICK, parameters={"point": [100, 200]}),
+        raw_output='{"action":"CLICK","parameters":{"point":[100,200]}}',
+        screen_summary="屏幕摘要",
+        action_summary="点击按钮",
+        prompt_text="测试 prompt 文本",
+        reasoning_content="思维链内容",
+        usage={"input_tokens": 100, "output_tokens": 50},
+    )
+    complete = ActionOutput(
+        action=Action(type=ACTION_COMPLETE, parameters={}),
+        raw_output='{"action":"COMPLETE","parameters":{}}',
+        screen_summary="done",
+        action_summary="done",
+        prompt_text="test",
+    )
+    runner, bus, device = _make_runner_with_events([out, complete])
+
+    received = {}
+    bus.subscribe(STEP_REASONING_DONE, lambda **kw: received.update(kw))
+
+    task = Task(instruction="test", max_steps=5)
+    runner.start(task)
+    runner.step()
+
+    # 基础字段
+    assert received["action"].type == ACTION_CLICK
+    assert isinstance(received["reasoning_time"], float)
+
+    # 扩展字段(渐进渲染需要)
+    assert received["prompt_text"] == "测试 prompt 文本"
+    assert "CLICK" in received["raw_output"]
+    assert received["reasoning_content"] == "思维链内容"
+    assert received["screen_summary"] == "屏幕摘要"
+    assert received["action_summary"] == "点击按钮"
+    assert received["usage"]["input_tokens"] == 100
+
