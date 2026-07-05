@@ -5,8 +5,10 @@
   ① learned cache  之前视觉兜底学到的 (request -> package),持久化
   ② L1 静态表      高频中文名 -> package(一次性硬编码)
   ③ L1' alias      海外/旧版 package -> 国内替代(硬编码)
-  ④ L2 直通        输入本身是 package 格式且已安装
-  ⑤ L4 视觉兜底    回桌面 + raise OpenAppNeedsVisual,交给 Runner
+  ④ L1.5 label     设备侧动态解析:应用显示名精确匹配 -> package
+                     (可选注入;on-device 版走 PackageManager 标签索引)
+  ⑤ L2 直通        输入本身是 package 格式且已安装
+  ⑥ L4 视觉兜底    回桌面 + raise OpenAppNeedsVisual,交给 Runner
 
 注意:
 - **不做模糊匹配**(2026-05-21 起移除)。原因:Android 包名公共部分太多,
@@ -78,6 +80,7 @@ class AppLauncher:
         start_app: Callable[[str], None],
         go_home: Callable[[], None],
         verify_launch: Callable[[str], bool] | None = None,
+        label_resolver: Callable[[str], str | None] | None = None,
     ):
         """
         Args:
@@ -85,11 +88,14 @@ class AppLauncher:
             start_app:                 启动指定 package(通常是 device.app_start)
             go_home:                   回桌面(通常是 device.press("home"))
             verify_launch:             启动后验证当前前台是否就是该 package。None 时跳过验证
+            label_resolver:            应用显示名精确匹配 -> package 的动态解析器
+                                       (仅精确匹配,禁止模糊)。None 时跳过该级
         """
         self._get_installed = installed_packages_getter
         self._start_app = start_app
         self._go_home = go_home
         self._verify = verify_launch
+        self._label_resolver = label_resolver
         self._learned = _load_learned()
 
     def open(self, name_or_package: str) -> str:
@@ -116,8 +122,12 @@ class AppLauncher:
         if alias and alias in installed and alias not in (learned, l1):
             candidates.append(("L1 alias", alias))
 
+        label = self._resolve_label(request)
+        if label and label in installed and label not in (learned, l1, alias):
+            candidates.append(("L1.5 label", label))
+
         if is_package_like(request) and request in installed:
-            if request not in (learned, l1, alias):
+            if request not in (learned, l1, alias, label):
                 candidates.append(("L2 direct", request))
 
         for tag, pkg in candidates:
@@ -149,6 +159,15 @@ class AppLauncher:
         logger.info("[OPEN][learn] %r -> %s (from visual fallback)", request, package)
         self._learned[request] = package
         _save_learned(self._learned)
+
+    def _resolve_label(self, request: str) -> str | None:
+        if self._label_resolver is None:
+            return None
+        try:
+            return self._label_resolver(request)
+        except Exception as exc:
+            logger.warning("label_resolver(%r) failed: %s", request, exc)
+            return None
 
     def _get_installed_packages(self) -> list[str]:
         try:

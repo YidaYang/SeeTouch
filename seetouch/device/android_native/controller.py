@@ -54,6 +54,7 @@ class NativeAndroidController:
             start_app=self._start_app,
             go_home=self.go_home,
             verify_launch=self._verify_launch,
+            label_resolver=self._package_for_label,
         )
 
     # ------------------------- DeviceController API -------------------------
@@ -125,6 +126,10 @@ class NativeAndroidController:
         except Exception as exc:
             logger.warning("installedPackages failed: %s", exc)
             return []
+
+    def _package_for_label(self, label: str) -> str | None:
+        pkg = self._b.packageForLabel(label)
+        return str(pkg) if pkg is not None else None
 
     def _start_app(self, package: str) -> None:
         if not self._b.startApp(package):

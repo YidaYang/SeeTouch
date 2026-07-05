@@ -3,6 +3,7 @@ package com.seetouch.app.bridge
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import com.seetouch.app.appindex.PackageManagerAppIndexProvider
 import com.seetouch.app.device.SeeTouchAccessibilityService
 import java.io.ByteArrayOutputStream
 
@@ -84,6 +85,18 @@ object DeviceBridge {
             .map { it.activityInfo.packageName }
             .distinct()
             .toTypedArray()
+    }
+
+    /** 应用显示名精确匹配 -> package(OPEN L1.5,复用 helper 的 AppIndex)。
+     *  仅精确匹配(trim + 忽略大小写),避免模糊匹配假阳性;未命中返回 null。 */
+    @JvmStatic
+    fun packageForLabel(label: String): String? {
+        val wanted = label.trim()
+        if (wanted.isEmpty()) return null
+        return PackageManagerAppIndexProvider(context())
+            .queryLaunchableApps()
+            .firstOrNull { it.label.trim().equals(wanted, ignoreCase = true) }
+            ?.packageName
     }
 
     /** 通过 launcher intent 启动指定 package。 */
