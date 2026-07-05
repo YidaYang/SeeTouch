@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">SeeTouch</string>
+    <string name="accessibility_service_description">SeeTouch 需要无障碍权限来代表你执行屏幕操作（点击、滑动、输入、截图），仅在你发起任务时使用。</string>
 </resources>

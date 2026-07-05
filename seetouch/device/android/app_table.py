@@ -51,6 +51,8 @@ APP_TABLE: dict[str, str] = {
     # 浏览器 / 搜索
     "百度": "com.baidu.searchbox",
     "夸克": "com.quark.browser",
+    # 系统应用(AOSP 标准包名,各厂商 ROM 基本一致)
+    "设置": "com.android.settings",
 }
 
 

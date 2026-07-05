@@ -30,6 +30,7 @@ def run(api_key: str = "") -> str:
             checks[name] = {"ok": False, "detail": traceback.format_exc()}
 
     check("import_core", _check_import_core)
+    check("bridge_packages", _check_bridge_packages)
     check("image_pipeline", _check_image_pipeline)
     check("parser", _check_parser)
     if api_key:
@@ -49,6 +50,13 @@ def _check_import_core() -> str:
     from seetouch.safety.guard import Guard  # noqa: F401
 
     return "core/reasoning/perception/safety importable"
+
+
+def _check_bridge_packages() -> str:
+    from com.seetouch.app.bridge import DeviceBridge  # type: ignore[import-not-found]
+
+    pkgs = [str(p) for p in DeviceBridge.installedPackages()]
+    return f"count={len(pkgs)} has_settings={'com.android.settings' in pkgs} sample={pkgs[:5]}"
 
 
 def _check_image_pipeline() -> str:

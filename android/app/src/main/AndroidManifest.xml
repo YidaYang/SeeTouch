@@ -14,6 +14,7 @@
     </queries>
 
     <application
+        android:name=".SeeTouchApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -22,6 +23,27 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.SeeTouch">
+
+        <!-- 设备层核心:手势注入/截图/前台 app 跟踪/BACK/HOME -->
+        <service
+            android:name=".device.SeeTouchAccessibilityService"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- 无 UI 任务执行入口(Phase 1 诊断用),ADB 触发,日志打 tag SEETOUCH_RUN -->
+        <activity
+            android:name=".diag.TaskRunActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <!-- Python 运行时自检(诊断用),ADB 触发,报告打到 logcat tag SEETOUCH_PY -->
         <activity
