@@ -10,3 +10,4 @@ runs/
 .ruff_cache/
 .coverage
 htmlcov/
+scratch/
