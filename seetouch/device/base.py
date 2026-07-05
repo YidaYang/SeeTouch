@@ -15,6 +15,19 @@ class OpenAppFailed(DeviceError):
     """OPEN 动作完全失败(L1-L4 都没成功)。"""
 
 
+class OpenAppNotFound(DeviceError):
+    """OPEN 的应用名在应用索引中未命中高置信匹配。
+
+    携带相似候选应用名,Runner 应把候选反馈给模型,
+    让它重新输出精确应用名或更短的关键词。
+    """
+
+    def __init__(self, requested: str, suggestions: list[str] | None = None):
+        super().__init__(f"app not found in index: {requested!r} suggestions={suggestions}")
+        self.requested = requested
+        self.suggestions = suggestions or []
+
+
 class OpenAppNeedsVisual(DeviceError):
     """L1-L3 都未命中,需要由 Reasoner 通过视觉在桌面找图标。
 
@@ -58,9 +71,11 @@ class DeviceController(Protocol):
         ...
 
     def open_app(self, name_or_package: str) -> None:
-        """启动 app。可接受中文名或 Android package name。
+        """启动 app。接受应用显示名(首选)或 Android package name。
 
-        实现应按 L1->L4 fallback 处理,L3 失败时 raise OpenAppNeedsVisual。
+        实现应基于应用索引解析:精确/强模糊命中则启动;
+        歧义时 raise OpenAppNotFound(携带候选);
+        无索引可用且无法解析时 raise OpenAppNeedsVisual。
         """
         ...
 

@@ -186,15 +186,18 @@ seetouch/
 
 #### OPEN 启动策略
 
-五级 fallback 自动适配各种场景：
+以应用名为一等公民（VLM 输出桌面显示名，不输出包名），基于本机应用索引解析：
 
 ```
-① learned cache  — 视觉学习到的中文名→包名映射
-② L1 静态表      — 17 个高频 app（抖音、B站、微信等）
-③ L1' alias      — 海外替代（TikTok→抖音）
-④ L2 直通        — 直接使用包名
-⑤ L4 视觉兜底    — 回桌面，视觉识别图标点击
+① learned cache  — 已学习的 请求名→包名 映射（持久化）
+② 索引精确匹配   — 应用显示名归一化后完全相等
+③ 索引强模糊     — 唯一子串命中（如 "哔哩"→"哔哩哔哩"）直接启动并学习
+④ 候选反馈       — 歧义/未命中时把相似应用名反馈给 VLM，让它重选或换关键词
+⑤ 视觉兜底       — 索引不可用或多次反馈仍未命中时，回桌面视觉识别图标点击
 ```
+
+索引数据源：on-device 走 PackageManager（DeviceBridge），PC 端读 helper 导出的
+`~/.seetouch/applist.json`（`python scripts/pull_applist.py` 自动同步）。
 
 > 视觉兜底成功后自动学习映射，持久化到 `~/.seetouch/learned_apps.json`
 

@@ -1,8 +1,7 @@
-"""高频 app 的中文名 -> Android package 静态表。
+"""[已退役] 高频 app 的中文名 -> Android package 静态表。
 
-只覆盖国内常用应用(L1 快速路径)。未命中时由 app_launcher 走 L2-L4。
-
-PACKAGE_ALIASES 处理"模型输出海外/旧版包名,但设备上装的是国内/新版"的情况。
+2026-07-05 起 OPEN 改为应用索引(显示名 -> package)解析,VLM 不再输出包名,
+本表与 PACKAGE_ALIASES 均已从 app_launcher 移除。文件保留仅作历史参考。
 """
 
 from __future__ import annotations

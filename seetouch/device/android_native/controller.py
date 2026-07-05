@@ -4,8 +4,8 @@
 本实现跑在手机 APP 进程内,所有设备操作经 Chaquopy 调 Kotlin
 com.seetouch.app.bridge.DeviceBridge(背后是 AccessibilityService)。
 
-OPEN 分级 fallback 完全复用 AppLauncher,只是把 uiautomator2 的
-app_list / app_start / press("home") 换成 DeviceBridge 等价物。
+OPEN 解析完全复用 AppLauncher;应用索引数据源走 DeviceBridge
+(PackageManager 枚举桌面可启动应用的 显示名 -> package)。
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from PIL import Image
 
 from ..base import DeviceError
 from ...perception.screen import norm_to_pixel
+from ..android.app_index import AppIndexEntry
 from ..android.app_launcher import AppLauncher
 
 
@@ -54,7 +55,7 @@ class NativeAndroidController:
             start_app=self._start_app,
             go_home=self.go_home,
             verify_launch=self._verify_launch,
-            label_resolver=self._package_for_label,
+            index_source=_BridgeAppIndexSource(self._b),
         )
 
     # ------------------------- DeviceController API -------------------------
@@ -127,10 +128,6 @@ class NativeAndroidController:
             logger.warning("installedPackages failed: %s", exc)
             return []
 
-    def _package_for_label(self, label: str) -> str | None:
-        pkg = self._b.packageForLabel(label)
-        return str(pkg) if pkg is not None else None
-
     def _start_app(self, package: str) -> None:
         if not self._b.startApp(package):
             raise DeviceError(f"no launch intent for package: {package}")
@@ -143,3 +140,30 @@ class NativeAndroidController:
             time.sleep(0.3)
         logger.info("verify_launch(%s) timeout; current=%s", package, self.current_app())
         return False
+
+
+class _BridgeAppIndexSource:
+    """AppIndexSource 实现:经 DeviceBridge 枚举桌面可启动应用。
+
+    Bridge 返回 "package\tlabel" 行数组;控制器生命周期内缓存一次
+    (每个任务新建控制器,天然按任务刷新)。
+    """
+
+    def __init__(self, bridge):
+        self._bridge = bridge
+        self._cache: list[AppIndexEntry] | None = None
+
+    def entries(self) -> list[AppIndexEntry]:
+        if self._cache is not None:
+            return self._cache
+        result: list[AppIndexEntry] = []
+        try:
+            for line in self._bridge.launchableApps():
+                package, _, label = str(line).partition("\t")
+                if package and label:
+                    result.append(AppIndexEntry(label=label, package=package))
+        except Exception as exc:
+            logger.warning("launchableApps failed: %s", exc)
+            return []
+        self._cache = result
+        return result

@@ -19,7 +19,7 @@ from seetouch.core.action import (
 )
 from seetouch.core.runner import Runner
 from seetouch.core.task import Task
-from seetouch.device.base import OpenAppNeedsVisual
+from seetouch.device.base import OpenAppNeedsVisual, OpenAppNotFound
 from seetouch.safety.guard import Guard
 
 
@@ -298,3 +298,92 @@ def test_runner_visual_fallback_with_swipe_pages(tmp_path: Path):
     assert result.completed
     # 翻页 2 次没切前台,只有点击图标后切换,才学一次
     assert device.learned == [("目标app", "com.target.app")]
+
+
+def test_runner_feeds_back_open_candidates(tmp_path: Path):
+    """OpenAppNotFound 不算失败:候选反馈进 notes,模型下一步用准确名字重试成功。"""
+
+    class AmbiguousOpenDevice(MockDevice):
+        def open_app(self, name):
+            self.actions.append(("open", (name,)))
+            if name == "地图":
+                raise OpenAppNotFound(name, ["高德地图", "百度地图"])
+            self._current_app = "com.autonavi.minimap"
+
+    device = AmbiguousOpenDevice()
+    reasoner = MockReasoner([
+        ActionOutput(
+            action=Action(type=ACTION_OPEN, parameters={"app_name": "地图"}),
+            action_summary="打开地图",
+        ),
+        ActionOutput(
+            action=Action(type=ACTION_OPEN, parameters={"app_name": "高德地图"}),
+            action_summary="打开高德地图",
+        ),
+        ActionOutput(
+            action=Action(type=ACTION_COMPLETE, parameters={}),
+            action_summary="完成",
+        ),
+    ])
+    runner = Runner(
+        device=device,
+        reasoner=reasoner,
+        guard=Guard(prompt_fn=lambda _msg: False),
+        runs_dir=tmp_path,
+    )
+
+    result = runner.run(Task(instruction="打开地图"))
+
+    assert result.completed
+    assert result.total_steps == 3
+    # 未匹配那步不算失败,且候选出现在 notes 里
+    trace = [json.loads(line) for line in
+             (Path(result.runs_dir) / "trace.jsonl").read_text(encoding="utf-8").splitlines()]
+    step1 = trace[0]
+    assert step1["execution_success"]
+    assert any("高德地图" in n and "百度地图" in n for n in step1["notes"])
+
+
+def test_runner_escalates_to_visual_after_max_open_misses(tmp_path: Path):
+    """连续 max_open_misses 次未匹配后,升级为视觉兜底(回桌面 + 武装 pending)。"""
+
+    class AlwaysMissDevice(MockDevice):
+        def open_app(self, name):
+            self.actions.append(("open", (name,)))
+            raise OpenAppNotFound(name, [])
+
+        def learn_app_from_visual(self, request, package):
+            self.learned.append((request, package))
+
+    device = AlwaysMissDevice()
+    device._current_app = "com.miui.home"
+    reasoner = MockReasoner([
+        ActionOutput(
+            action=Action(type=ACTION_OPEN, parameters={"app_name": "冷门app"}),
+            action_summary="打开冷门app",
+        ),
+        ActionOutput(
+            action=Action(type=ACTION_OPEN, parameters={"app_name": "冷门"}),
+            action_summary="换关键词重试",
+        ),
+        ActionOutput(
+            action=Action(type=ACTION_COMPLETE, parameters={}),
+            action_summary="完成",
+        ),
+    ])
+    runner = Runner(
+        device=device,
+        reasoner=reasoner,
+        guard=Guard(prompt_fn=lambda _msg: False),
+        runs_dir=tmp_path,
+        max_open_misses=2,
+    )
+
+    result = runner.run(Task(instruction="打开冷门app"))
+
+    assert result.completed
+    trace = [json.loads(line) for line in
+             (Path(result.runs_dir) / "trace.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert any("视觉兜底" in n for n in trace[1]["notes"])
+    # 升级时 Runner 主动回桌面
+    assert ("home", ()) in device.actions

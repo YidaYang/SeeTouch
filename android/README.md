@@ -105,7 +105,7 @@ END <payload 字节数>
 
 ## OPEN 策略（on-device）
 
-App 内 OPEN 动作分级 fallback：learned cache → L1 静态表 → L1' alias → **L1.5 label（PackageManager 应用显示名精确匹配，复用 appindex/）** → L2 包名直通 → L4 视觉兜底。详见 `seetouch/device/android/app_launcher.py`。
+App 内 OPEN 以**应用名**为一等公民（VLM 只输出桌面显示名，不输出包名）：learned cache → 索引精确匹配 → 唯一强模糊命中直接启动 → 歧义时把相似候选反馈给 VLM 重选 → 视觉兜底。索引数据源为 `DeviceBridge.launchableApps()`（PackageManager 枚举，复用 appindex/）。详见 `seetouch/device/android/app_launcher.py` 与 `app_index.py`。
 
 ## 诊断入口（ADB）
 

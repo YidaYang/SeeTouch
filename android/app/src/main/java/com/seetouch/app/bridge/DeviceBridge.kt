@@ -87,17 +87,15 @@ object DeviceBridge {
             .toTypedArray()
     }
 
-    /** 应用显示名精确匹配 -> package(OPEN L1.5,复用 helper 的 AppIndex)。
-     *  仅精确匹配(trim + 忽略大小写),避免模糊匹配假阳性;未命中返回 null。 */
+    /** 桌面可启动应用的完整索引(复用 helper 的 AppIndexProvider),
+     *  供 Python 侧 AppIndex 做应用名精确/模糊匹配。
+     *  每行格式 "package\tlabel";返回数组:Chaquopy 对 java 数组有原生迭代支持。 */
     @JvmStatic
-    fun packageForLabel(label: String): String? {
-        val wanted = label.trim()
-        if (wanted.isEmpty()) return null
-        return PackageManagerAppIndexProvider(context())
+    fun launchableApps(): Array<String> =
+        PackageManagerAppIndexProvider(context())
             .queryLaunchableApps()
-            .firstOrNull { it.label.trim().equals(wanted, ignoreCase = true) }
-            ?.packageName
-    }
+            .map { "${it.packageName}\t${it.label}" }
+            .toTypedArray()
 
     /** 通过 launcher intent 启动指定 package。 */
     @JvmStatic

@@ -147,6 +147,14 @@ def main() -> int:
         print(f"[3/3] 从 logcat 解码 -> {out_path}")
         data = decode_from_logcat(args.serial, out_path)
 
+    # 同步一份到 seetouch 默认索引位置,PC 端 OPEN 应用名解析直接可用
+    index_path = Path.home() / ".seetouch" / "applist.json"
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    index_path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print(f"\n已同步应用索引 -> {index_path}")
+
     print()
     summarize(data)
     return 0

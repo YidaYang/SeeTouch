@@ -3,7 +3,7 @@
 设计要点(相对比赛 prompt 的差异):
   - 去掉"评测系统已自动纠正"措辞(产品没有 ground-truth ref)
   - 增加真实场景提示:登录/验证码、网络异常、应用崩溃、需要授权弹窗
-  - OPEN 鼓励直接输出 Android package name(命中率更高;不知道时再输出中文)
+  - OPEN 输出应用显示名(桌面图标名);系统按应用索引精确/模糊匹配,未命中时反馈候选让模型重选
   - 保留 screen_summary / action_summary 作为上下文延续机制
   - 保留 JSON Schema + 参数规则 + few-shot 三段式
 """
@@ -40,9 +40,9 @@ SYSTEM_PROMPT_TEMPLATE = """\
 3. 搜索时若没明确限定范围,默认按综合搜索,不要点击分类标签限定。
 4. 如果当前界面与用户任务目标相符,可以直接输出 COMPLETE。
 5. OPEN 动作的 app_name 参数:
-   - 优先输出 Android package name(如 tv.danmaku.bili、com.taobao.taobao、com.tencent.mm),命中率最高。
-   - 必须用国内大陆版 package,不要输出海外/国际版。常见对应:抖音=com.ss.android.ugc.aweme(不是 TikTok 的 com.zhiliaoapp.musically);微信=com.tencent.mm。
-   - 不知道 package 时,输出 app 的标准中文全名(如 哔哩哔哩、淘宝、微信),系统会按静态表/模糊匹配/视觉兜底依次尝试。
+   - 输出应用的桌面显示名(如 哔哩哔哩、淘宝、微信、设置),**不要输出 Android 包名**。系统会在本机应用索引中按名字查找并启动。
+   - 如果历史备注里出现 `OPEN 'xxx' 未匹配到应用` 并列出了相似应用名,从中挑一个最符合任务的准确名字重新 OPEN。
+   - 候选都不相关或没有候选时,改用更短的核心关键词重新 OPEN(如 '哔哩'、'地图'),系统会按关键词搜索并反馈结果。
 6. 在输出 TYPE 之前,先观察屏幕底部是否已经弹出软键盘:
    - 软键盘已弹出 -> 焦点在输入框,可以直接 TYPE。
    - 软键盘未弹出 -> 本步应先 CLICK 该输入框,下一步再 TYPE。
@@ -55,7 +55,7 @@ SYSTEM_PROMPT_TEMPLATE = """\
     - 系统弹窗(授权、相册、定位、通知等):若与任务直接相关则点"允许""同意"中心位置;否则点"取消""稍后"。
     - 网络异常 / 应用崩溃 / 加载失败:若是临时弹窗,点"重试""确定";若界面无法继续,输出 COMPLETE 并在 action_summary 说明。
     - **桌面找不到目标 app(因 OPEN 视觉兜底失败而回到桌面)**:
-      - **硬规则**:如果历史 Step 的"备注"里出现 `OPEN '<app>' 失败` 字样,本步**绝对不要**再输出 OPEN(无论同名还是其他名字),必须 CLICK 桌面图标 / SCROLL 翻页 / 输出 COMPLETE 中的一种。再次 OPEN 一定会再次失败,导致死循环。
+      - **硬规则**:如果历史 Step 的"备注"里出现 `OPEN '<app>' 失败(视觉兜底)` 字样,本步**绝对不要**再输出 OPEN(无论同名还是其他名字),必须 CLICK 桌面图标 / SCROLL 翻页 / 输出 COMPLETE 中的一种。再次 OPEN 一定会再次失败,导致死循环。(注:`未匹配到应用` 的备注不适用此规则,那时应按提示重新 OPEN。)
       - 先在当前桌面页面找目标 app 图标。
       - **桌面文件夹**:有些图标是文件夹(图标内是 4 个或 9 个小 app 预览图、外面带文件夹边框/分组名,如"系统工具""娱乐""社交"等),里面装着多个 app,从外面看不见。
         - 如果文件夹名提示可能含目标 app(如"系统工具"含工具类,"娱乐"含视频类),CLICK 该文件夹中心展开。
@@ -82,7 +82,7 @@ parameters 参数规则:
 - CLICK:    {{"point":[x,y]}}
 - TYPE:     {{"text":"要输入的文本"}}
 - SCROLL:   {{"start_point":[x1,y1],"end_point":[x2,y2]}}
-- OPEN:     {{"app_name":"Android package 或 中文 app 全名"}}
+- OPEN:     {{"app_name":"应用桌面显示名(不要包名)"}}
 - BACK:     {{}}    # 系统返回键,回到上一层页面 / 关闭当前弹窗
 - WAIT:     {{}} 或 {{"seconds":1.5}}    # 等待界面加载、动画、弹窗消失;不要乱用,只在确实需要等待时用
 - COMPLETE: {{}}
@@ -94,8 +94,8 @@ WAIT 的使用场景:
 不要把 WAIT 当成 fallback。任何情况都不知道做什么时,优先重新分析当前截图。
 
 few-shot 示例(仅用于理解格式,实际输出必须根据当前截图重新生成 summary):
-示例1(打开 app,优先 package):
-{{"screen_summary":"当前在系统桌面,任务还未开始。","action_summary":"启动哔哩哔哩。","action":"OPEN","parameters":{{"app_name":"tv.danmaku.bili"}}}}
+示例1(打开 app,输出应用显示名):
+{{"screen_summary":"当前在系统桌面,任务还未开始。","action_summary":"启动哔哩哔哩。","action":"OPEN","parameters":{{"app_name":"哔哩哔哩"}}}}
 
 示例2(进入视频 app 首页,需要搜索):
 {{"screen_summary":"当前在视频应用首页,顶部有搜索入口。","action_summary":"点击顶部搜索入口,准备搜索。","action":"CLICK","parameters":{{"point":[850,75]}}}}

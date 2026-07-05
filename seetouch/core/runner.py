@@ -30,7 +30,12 @@ from ..core.action import (
     ACTION_WAIT,
     Action,
 )
-from ..device.base import DeviceController, DeviceError, OpenAppNeedsVisual
+from ..device.base import (
+    DeviceController,
+    DeviceError,
+    OpenAppNeedsVisual,
+    OpenAppNotFound,
+)
 from ..perception.screen import downscale
 from ..reasoning.base import Reasoner
 from ..safety.guard import Guard
@@ -65,6 +70,7 @@ class Runner:
         runs_dir: Path | str = "runs",
         max_consecutive_failures: int = 2,
         max_consecutive_identical_actions: int = 3,
+        max_open_misses: int = 3,
         event_bus: EventBus | None = None,
         action_settle_seconds: float = 1.0,
     ):
@@ -74,6 +80,7 @@ class Runner:
         self.runs_dir = Path(runs_dir)
         self.max_consecutive_failures = max_consecutive_failures
         self.max_consecutive_identical_actions = max_consecutive_identical_actions
+        self.max_open_misses = max_open_misses
         self._event_bus = event_bus
         self.action_settle_seconds = action_settle_seconds
 
@@ -84,6 +91,7 @@ class Runner:
         self._finished: bool = True
         self._pending_visual_request: str | None = None
         self._visual_baseline_app: str | None = None
+        self._open_miss_count = 0
 
     # ======================== 公开 API ========================
 
@@ -95,6 +103,7 @@ class Runner:
         self._finished = False
         self._pending_visual_request = None
         self._visual_baseline_app = None
+        self._open_miss_count = 0
         logger.info(
             "start task: id=%s instruction=%r runs_dir=%s",
             task.task_id, task.instruction, self._session.dir,
@@ -221,19 +230,27 @@ class Runner:
         try:
             self._execute(out.action)
             success = True
-        except OpenAppNeedsVisual as exc:
-            notes.append(
-                f"❗ OPEN '{exc.requested}' 失败:静态表/包名直通/别名都未命中,"
-                f"系统已回桌面。本步绝对不要再 OPEN 同名 app,必须 CLICK 桌面图标"
-                f"(找不到时 SCROLL 水平翻页或上滑打开应用抽屉)。"
-            )
+        except OpenAppNotFound as exc:
+            self._open_miss_count += 1
+            if self._open_miss_count >= self.max_open_misses:
+                # 多次反馈仍未命中,升级为视觉兜底
+                notes.append(self._arm_visual_fallback(exc.requested, go_home=True))
+            elif exc.suggestions:
+                names = "、".join(exc.suggestions)
+                notes.append(
+                    f"OPEN '{exc.requested}' 未匹配到应用。本机相似应用名:{names}。"
+                    f"下一步请从中挑一个准确名字重新 OPEN;都不相关时,"
+                    f"改用更短的核心关键词重新 OPEN(系统会按关键词搜索)。"
+                )
+            else:
+                notes.append(
+                    f"OPEN '{exc.requested}' 未匹配到应用,也没有相似候选。"
+                    f"请改用更短的核心关键词重新 OPEN(系统会按关键词搜索)。"
+                )
             success = True
-            self._pending_visual_request = exc.requested
-            self._visual_baseline_app = self._safe_current_app()
-            logger.info(
-                "visual fallback armed: request=%r baseline=%s",
-                self._pending_visual_request, self._visual_baseline_app,
-            )
+        except OpenAppNeedsVisual as exc:
+            notes.append(self._arm_visual_fallback(exc.requested))
+            success = True
         except DeviceError as exc:
             logger.warning("device error at step %d: %s", step, exc)
             notes.append(f"device_error: {exc}")
@@ -334,6 +351,29 @@ class Runner:
         """向 EventBus 发射事件(如果已配置)。"""
         if self._event_bus:
             self._event_bus.emit(event_type, **data)
+
+    def _arm_visual_fallback(self, requested: str, go_home: bool = False) -> str:
+        """武装视觉兜底状态,返回写入历史的 note 文本。
+
+        go_home=True 时先回桌面(OpenAppNotFound 升级路径;
+        OpenAppNeedsVisual 路径由 AppLauncher 自己回桌面)。
+        """
+        if go_home:
+            try:
+                self.device.go_home()
+            except Exception as exc:
+                logger.warning("go_home before visual fallback failed: %s", exc)
+        self._pending_visual_request = requested
+        self._visual_baseline_app = self._safe_current_app()
+        logger.info(
+            "visual fallback armed: request=%r baseline=%s",
+            self._pending_visual_request, self._visual_baseline_app,
+        )
+        return (
+            f"❗ OPEN '{requested}' 失败(视觉兜底):应用索引中找不到该应用,"
+            f"系统已回桌面。本步绝对不要再 OPEN,必须 CLICK 桌面图标"
+            f"(找不到时 SCROLL 水平翻页或上滑打开应用抽屉)。"
+        )
 
     def _safe_current_app(self) -> str | None:
         try:

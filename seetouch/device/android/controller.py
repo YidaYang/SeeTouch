@@ -13,6 +13,7 @@ from PIL import Image
 
 from ..base import DeviceError
 from ...perception.screen import norm_to_pixel
+from .app_index import AppListJsonSource
 from .app_launcher import AppLauncher
 
 
@@ -45,6 +46,10 @@ class AndroidController:
             start_app=self._d.app_start,
             go_home=lambda: self._d.press("home"),
             verify_launch=self._verify_launch,
+            # PC 端索引源:helper APK 导出的 applist.json
+            # (scripts/pull_applist.py 会同步一份到 ~/.seetouch/applist.json);
+            # 文件缺失时索引为空,OPEN 自动退化为视觉兜底
+            index_source=AppListJsonSource(),
         )
 
     def _verify_launch(self, package: str, timeout: float = 3.0) -> bool:

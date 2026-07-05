@@ -1,23 +1,19 @@
-"""OPEN 动作的分级 fallback。
+"""OPEN 动作:以应用名为一等公民的启动策略。
 
-不维护"全量"映射表。整体策略:
+VLM 对应用名有可靠知识,对包名没有(2026-07-05 起,静态表/别名/包名直通
+从 VLM 路径移除)。整体解析顺序:
 
-  ① learned cache  之前视觉兜底学到的 (request -> package),持久化
-  ② L1 静态表      高频中文名 -> package(一次性硬编码)
-  ③ L1' alias      海外/旧版 package -> 国内替代(硬编码)
-  ④ L1.5 label     设备侧动态解析:应用显示名精确匹配 -> package
-                     (可选注入;on-device 版走 PackageManager 标签索引)
-  ⑤ L2 直通        输入本身是 package 格式且已安装
-  ⑥ L4 视觉兜底    回桌面 + raise OpenAppNeedsVisual,交给 Runner
+  ① learned cache   之前学到的 (request -> package),持久化
+  ② 索引精确匹配     应用显示名归一化后完全相等
+  ③ 索引强模糊       唯一子串命中(如 "哔哩" -> "哔哩哔哩")直接启动
+  ④ 候选反馈         多个/低置信候选 -> raise OpenAppNotFound(携带候选应用名),
+                     由 Runner 反馈给模型重新输出精确名或关键词
+  ⑤ package 直通     输入本身是 package 格式且已安装(内部调用兼容,VLM 不再输出包名)
+  ⑥ 视觉兜底         索引不可用(PC 端无 applist.json)时回桌面 + raise OpenAppNeedsVisual
 
-注意:
-- **不做模糊匹配**(2026-05-21 起移除)。原因:Android 包名公共部分太多,
-  fuzzy 假阳性高,曾经把 com.zhiliaoapp.musically 误匹配到 com.biquge.ebook.app。
-- **learned cache 只在视觉兜底成功后写入**,不在 L1/L2/L3 启动后自动写。
-  原因:L1/L2 已经有静态权威映射,不需要学;视觉兜底学到的才是真正"模型 + 用户"
-  共同验证过的新映射。
-
-成功后由 Runner 通过 learn_from_visual() 写入 ~/.seetouch/learned_apps.json。
+learned cache 写入时机:
+  - 视觉兜底成功后由 Runner 调 learn_from_visual()
+  - 强模糊命中且 verify_launch 确认前台后自动回写(已验证的映射,下次免搜索)
 """
 
 from __future__ import annotations
@@ -28,8 +24,8 @@ import re
 from pathlib import Path
 from typing import Callable
 
-from . import app_table
-from ..base import OpenAppNeedsVisual
+from ..base import OpenAppNeedsVisual, OpenAppNotFound
+from .app_index import AppIndex, AppIndexSource
 
 
 logger = logging.getLogger(__name__)
@@ -69,10 +65,7 @@ def _save_learned(cache: dict[str, str]) -> None:
 
 
 class AppLauncher:
-    """封装 OPEN 动作的分级 fallback 流程。
-
-    learned cache 只通过 learn_from_visual() 写入,不在普通启动路径自动学。
-    """
+    """封装 OPEN 动作的应用名解析 + 启动流程。"""
 
     def __init__(
         self,
@@ -80,70 +73,67 @@ class AppLauncher:
         start_app: Callable[[str], None],
         go_home: Callable[[], None],
         verify_launch: Callable[[str], bool] | None = None,
-        label_resolver: Callable[[str], str | None] | None = None,
+        index_source: AppIndexSource | None = None,
     ):
         """
         Args:
-            installed_packages_getter: 返回设备已安装包名列表(通常是 device.app_list)
+            installed_packages_getter: 返回设备已安装包名列表(learned/包名直通校验用)
             start_app:                 启动指定 package(通常是 device.app_start)
             go_home:                   回桌面(通常是 device.press("home"))
             verify_launch:             启动后验证当前前台是否就是该 package。None 时跳过验证
-            label_resolver:            应用显示名精确匹配 -> package 的动态解析器
-                                       (仅精确匹配,禁止模糊)。None 时跳过该级
+            index_source:              应用索引数据源(显示名 -> package)。None 时索引级跳过,
+                                       未命中直接走视觉兜底
         """
         self._get_installed = installed_packages_getter
         self._start_app = start_app
         self._go_home = go_home
         self._verify = verify_launch
-        self._label_resolver = label_resolver
+        self._index = AppIndex(index_source) if index_source is not None else None
         self._learned = _load_learned()
 
     def open(self, name_or_package: str) -> str:
-        """启动 app。命中即启动并返回实际使用的 package;否则 raise OpenAppNeedsVisual。"""
+        """启动 app,返回实际使用的 package。
+
+        Raises:
+            OpenAppNotFound:    索引可用但未高置信命中(携带候选应用名)
+            OpenAppNeedsVisual: 索引不可用且其他途径都未命中(已回桌面)
+        """
         request = (name_or_package or "").strip()
         if not request:
             raise OpenAppNeedsVisual(request)
 
         installed = self._get_installed_packages()
 
-        # 候选列表:learned -> 静态表 -> 海外别名 -> package 直通
-        # 没有模糊匹配。每个候选 start + verify;成功直接返回,失败试下一个。
-        candidates: list[tuple[str, str]] = []  # (source_tag, package)
-
+        # ① learned cache
         learned = self._learned.get(request)
-        if learned and learned in installed:
-            candidates.append(("learned", learned))
+        if learned and (not installed or learned in installed):
+            if self._try_launch("learned", request, learned):
+                return learned
 
-        l1 = app_table.lookup(request)
-        if l1 and l1 in installed and l1 != learned:
-            candidates.append(("L1 table", l1))
+        # ②③ 应用索引:精确 / 唯一强模糊
+        candidates = []
+        if self._index is not None and not self._index.is_empty():
+            entry, candidates = self._index.resolve(request)
+            if entry is not None:
+                if self._try_launch("index", request, entry.package):
+                    if entry.label != request:
+                        # 强模糊命中且前台已验证,回写映射,下次免搜索
+                        self.learn(request, entry.package, source="index-fuzzy")
+                    return entry.package
 
-        alias = app_table.alias_for_package(request)
-        if alias and alias in installed and alias not in (learned, l1):
-            candidates.append(("L1 alias", alias))
-
-        label = self._resolve_label(request)
-        if label and label in installed and label not in (learned, l1, alias):
-            candidates.append(("L1.5 label", label))
-
+        # ⑤ package 直通(内部调用兼容)
         if is_package_like(request) and request in installed:
-            if request not in (learned, l1, alias, label):
-                candidates.append(("L2 direct", request))
+            if self._try_launch("package", request, request):
+                return request
 
-        for tag, pkg in candidates:
-            logger.info("[OPEN][%s] %r -> %s (verifying...)", tag, request, pkg)
-            try:
-                self._start_app(pkg)
-            except Exception as exc:
-                logger.warning("start_app(%s) failed: %s", pkg, exc)
-                continue
-            if self._verify is None or self._verify(pkg):
-                logger.info("[OPEN][%s] confirmed %s", tag, pkg)
-                return pkg
-            logger.info("[OPEN][%s] launch verify failed for %s, trying next candidate", tag, pkg)
+        if self._index is not None and not self._index.is_empty():
+            # ④ 候选反馈给模型
+            suggestions = [c.entry.label for c in candidates]
+            logger.info("[OPEN][not-found] %r suggestions=%s", request, suggestions)
+            raise OpenAppNotFound(request, suggestions)
 
-        # L4: 视觉兜底
-        logger.info("[OPEN][L4 visual] %r -> go_home and signal runner", request)
+        # ⑥ 视觉兜底(无索引可用)
+        logger.info("[OPEN][visual] %r -> go_home and signal runner", request)
         try:
             self._go_home()
         except Exception as exc:
@@ -152,22 +142,30 @@ class AppLauncher:
 
     def learn_from_visual(self, request: str, package: str) -> None:
         """视觉兜底成功后回写 learned cache。Runner 在前台变化时调用。"""
+        self.learn(request, package, source="visual")
+
+    def learn(self, request: str, package: str, source: str = "manual") -> None:
+        """把已验证的 (request -> package) 映射写入持久化缓存。"""
         if not request or not package:
             return
         if self._learned.get(request) == package:
             return
-        logger.info("[OPEN][learn] %r -> %s (from visual fallback)", request, package)
+        logger.info("[OPEN][learn] %r -> %s (from %s)", request, package, source)
         self._learned[request] = package
         _save_learned(self._learned)
 
-    def _resolve_label(self, request: str) -> str | None:
-        if self._label_resolver is None:
-            return None
+    def _try_launch(self, tag: str, request: str, package: str) -> bool:
+        logger.info("[OPEN][%s] %r -> %s (verifying...)", tag, request, package)
         try:
-            return self._label_resolver(request)
+            self._start_app(package)
         except Exception as exc:
-            logger.warning("label_resolver(%r) failed: %s", request, exc)
-            return None
+            logger.warning("start_app(%s) failed: %s", package, exc)
+            return False
+        if self._verify is None or self._verify(package):
+            logger.info("[OPEN][%s] confirmed %s", tag, package)
+            return True
+        logger.info("[OPEN][%s] launch verify failed for %s", tag, package)
+        return False
 
     def _get_installed_packages(self) -> list[str]:
         try:
