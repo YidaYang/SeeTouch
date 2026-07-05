@@ -375,6 +375,28 @@ metadata:
 
 ---
 
+## OPEN 重构：应用名一等公民（2026-07-05）
+
+**动机（用户拍板）：** VLM 没有包名知识只有应用名知识，旧的"输出包名+五级兜底"不好用。
+
+**新链路：** VLM 输出应用桌面显示名 → AppIndex（learned cache → 精确 → 唯一强模糊直接启动）
+→ 歧义/未命中 raise `OpenAppNotFound(suggestions)` → Runner 把候选写 notes 反馈 VLM 重选/换关键词
+→ 累计 3 次未命中升级视觉兜底。静态表 `app_table.py`、alias、包名直通（VLM 路径）全部移除。
+
+**关键文件：**
+- 新增 `seetouch/device/android/app_index.py`（AppIndex/AppIndexSource/StaticAppIndexSource/AppListJsonSource）
+- 重写 `app_launcher.py`；`base.py` 新增 `OpenAppNotFound`
+- `runner.py`：`max_open_misses` 计数 + `_arm_visual_fallback()`（NeedsVisual 路径不再重复 go_home）
+- Kotlin：`DeviceBridge.launchableApps()` 替代 `packageForLabel()`
+- PC 端：`AppListJsonSource` 读 `~/.seetouch/applist.json`，`pull_applist.py` 自动同步一份
+
+**验证：** 83 个测试全过（新增 app_index 单测 + launcher 单测重写 + Runner 候选反馈/升级集成测试）；
+模拟器 e2e："打开时钟" 2 步完成；"打开哔哩哔哩"（未安装）反馈→换关键词→3 次后正确升级视觉兜底。
+
+**踩坑：** 模拟器 GMS 应用（Maps/Gmail）无中文资源，label 是英文 "Maps"，"地图"匹配不上是数据问题不是代码问题——真机中文环境无此问题。
+
+---
+
 ## 相关记忆
 
 - [[technical_decisions.md]] — fuzzy 匹配移除详细原因、WAIT 协议设计

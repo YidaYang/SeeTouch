@@ -11,7 +11,45 @@ metadata:
 
 ---
 
-## OPEN 启动策略演化
+## OPEN 启动策略：应用名一等公民（2026-07-05 重构，当前方案）
+
+### 背景：为什么推翻旧的五级 fallback
+
+VLM 对应用名有可靠知识，对 Android 包名没有（经常写错/瞎编）。
+旧方案围绕"模型输出包名"设计（静态表/alias/包名直通），治标不治本。
+现在 helper/on-device 都能拿到本机"显示名→包名"索引，直接让 VLM 输出应用名。
+
+### 当前解析顺序（app_launcher.py + app_index.py）
+
+```
+open_app(name):
+  ① learned cache   ~/.seetouch/learned_apps.json（持久化）
+  ② 索引精确匹配    显示名归一化(casefold+去空白/分隔符)后相等
+  ③ 索引强模糊      唯一子串命中("哔哩"→"哔哩哔哩")直接启动，verify 后回写 learned
+  ④ 候选反馈        歧义/未命中 → raise OpenAppNotFound(suggestions)，
+                    Runner 把候选写进 notes，VLM 下一步重选或换关键词
+  ⑤ package 直通    仅内部调用兼容，prompt 已禁止 VLM 输出包名
+  ⑥ 视觉兜底        索引不可用(PC 无 applist.json)直接触发；
+                    或 Runner 累计 max_open_misses(默认3)次未命中后升级
+```
+
+**索引源抽象（AppIndexSource）：** on-device = `DeviceBridge.launchableApps()`
+（"package\tlabel" 行）；PC = `~/.seetouch/applist.json`（pull_applist.py 自动同步，
+可用 `SEETOUCH_APPLIST_PATH` 覆盖）；测试 = StaticAppIndexSource。
+
+**两种 OPEN 失败 note 语义不同（prompt 已区分）：**
+- `OPEN 'x' 未匹配到应用`：允许且应该重新 OPEN（挑候选/换关键词）
+- `OPEN 'x' 失败(视觉兜底)`：禁止再 OPEN，必须 CLICK 桌面图标
+
+**learned 回写时机：** 视觉兜底成功（原有）+ 强模糊命中且 verify_launch 确认前台（新增）。
+精确命中不写（索引已是权威映射）。
+
+**验证（模拟器 e2e）：** "打开时钟"→VLM 输出"时钟"→精确命中 2 步完成；
+"打开哔哩哔哩"(未安装)→反馈→VLM 换关键词"哔哩"→再反馈→3 次后升级视觉兜底，全链路符合预期。
+
+---
+
+## ［已废弃 2026-07-05］旧 OPEN 五级 fallback（包名导向）
 
 ### 设计目标
 
@@ -34,6 +72,10 @@ open_app(name_or_package):
 **关键：learned cache 只在视觉兜底成功后写入，不在 L1/L2/alias 启动后自动学习。**
 
 **Why：** L1/L2 已是权威映射，学了是冗余；只有视觉兜底是"模型+用户+设备"三方验证过的新映射，值得持久化。
+
+**废弃原因：** 依赖 VLM 输出包名，而 VLM 没有包名知识；静态表/alias 覆盖面永远不够。
+`app_table.py` 文件保留但已不被引用。下节"fuzzy 移除"针对的是旧方案对**包名**做模糊匹配的 bug；
+新方案的模糊匹配是对**应用显示名**，且歧义时不猜、反馈给模型，不存在同类假阳性风险。
 
 ---
 

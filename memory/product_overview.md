@@ -90,18 +90,19 @@ metadata:
 - 识别控件位置、文本内容、应用状态、广告/弹窗等
 - 输出归一化坐标（0-1000）+ 动作决策
 
-### 2. OPEN 启动策略（五级 fallback）
+### 2. OPEN 启动策略（应用名一等公民，2026-07-05 重构）
 ```
-① learned cache   — 视觉兜底学到的映射（持久化到 ~/.seetouch/learned_apps.json）
-② L1 静态表       — 高频中文名 → package（17 个国民应用）
-③ L1' alias       — 海外/旧版 package → 国内替代（TikTok → 抖音等）
-④ L2 直通         — 输入本身是 package 格式且已安装
-⑤ L4 视觉兜底     — 回桌面 + raise OpenAppNeedsVisual，交给 Runner 视觉识别图标点击
+① learned cache   — 已学习映射（持久化到 ~/.seetouch/learned_apps.json）
+② 索引精确匹配    — 本机应用显示名归一化后相等（on-device PackageManager / PC applist.json）
+③ 索引强模糊      — 唯一子串命中直接启动并学习（"哔哩"→"哔哩哔哩"）
+④ 候选反馈        — 歧义/未命中 raise OpenAppNotFound，Runner 把相似候选反馈给 VLM 重选
+⑤ 视觉兜底        — 索引不可用或多次未命中后，回桌面 + OpenAppNeedsVisual 视觉识别图标
 ```
+VLM 只输出应用桌面显示名，不输出包名。详见 [[technical_decisions.md]]。
 
 **关键设计：**
-- 不维护全量映射表（用户反对硬编码）
-- **移除 fuzzy 模糊匹配**（2026-05-21 起）—— Android 包名公共部分过多，假阳性高
+- 不维护任何硬编码映射表（静态表/alias 已废弃）
+- 模糊匹配只对**应用显示名**做，歧义时不猜、反馈给模型（旧的对包名 fuzzy 因假阳性已于 2026-05-21 移除）
 - 视觉兜底自动学习：Runner 监测前台切换，首次进入非桌面 app 时回写 cache
 
 参考：[[technical_decisions.md]]

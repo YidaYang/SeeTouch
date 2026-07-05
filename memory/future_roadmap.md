@@ -25,7 +25,7 @@ metadata:
 
 ## 近期待办
 
-### 1. 应用名解析方案（已确定，待实现）
+### 1. 应用名解析方案 ✅（2026-07-05 全部完成，含应用名一等公民重构）
 
 **目标：** 彻底解决 OPEN 启动的"中文名 → package"映射问题，缩小视觉兜底使用范围。
 
@@ -42,16 +42,16 @@ metadata:
 - 模拟器验证通过（双通道一致、zh-CN 中文应用名正确）；真机（Xiaomi）回归待做
 - 注意：manifest 必须声明 `<queries>` MAIN/LAUNCHER（Android 11+ 包可见性）
 
-#### Stage 2：seetouch 集成
-- 新增 `device/android/app_index.py`：`AppIndex` 类
-- 集成 helper APK：启动 Activity → 轮询 `.done` / pull / parse → 缓存
-- `AppLauncher` 新增 L0.5 层：learned cache 和 L1 静态表之间插入 AppIndex 查询
-- 静态表保留（快速路径 + 兜底）
+#### Stage 2：seetouch 集成 ✅（2026-07-05 已完成，方案升级）
+- `device/android/app_index.py` 已落地：AppIndex + AppIndexSource 抽象（on-device/PC/测试三种源）
+- PC 端读 `~/.seetouch/applist.json`（pull_applist.py 自动同步），不再需要运行时触发 helper
+- 静态表/alias 已废弃（非保留）：OPEN 改为应用名一等公民，见 technical_decisions.md
 
-#### Stage 3：最终迁移（on-device APP 时） ✅（2026-07-05 已完成）
-- `AppLauncher` 新增可选 `label_resolver` 注入点（L1.5，仅精确匹配）；`DeviceBridge.packageForLabel` 复用 `PackageManagerAppIndexProvider` 直接调 PackageManager，不走 ADB
+#### Stage 3：最终迁移（on-device APP 时） ✅（2026-07-05 已完成并升级）
+- 初版：`label_resolver` 注入点 + `DeviceBridge.packageForLabel`（仅精确匹配）
+- 当天升级：改为 `index_source` 注入 + `DeviceBridge.launchableApps()` 全量索引，
+  Python 侧 AppIndex 做精确/模糊匹配与候选反馈
 - 持久化：learned cache 写入 App 内部存储（HOME 指向 filesDir）
-- 注：Stage 2（PC 端集成 helper 索引）被跳过——on-device 版直接到位；PC 端如需可后补
 
 **构建环境要求：**
 - 本机仅 JDK 17，无 Android SDK / Gradle / Studio
