@@ -195,6 +195,20 @@ metadata:
   - 时间线步骤先以 pending 状态展示（蓝色脉冲动画），`step_result` 到来后 finalize 为 success/failure/terminal
 - **验证**: 69 个测试全绿，0 回归。新增 1 个测试：验证 `reasoning_done` 事件包含扩展字段。
 
+### 2026-07-05：helper APK 应用索引导出（Stage 1 落地）
+
+- **背景**: 用户本地 Android Studio 创建 `android/` Gradle 工程骨架（工程名 SeeTouch，为升级为独立主 App 预留），AGP 9.2.1 / Gradle 9.4.1 / compileSdk 36 / minSdk 26 / Kotlin（AGP 内置）。
+- **变更（commit `9ba950c` + `d1a0bdb`）**:
+  - `appindex/`：`AppEntry` / `AppIndexProvider`(抽象) / `PackageManagerAppIndexProvider`（queryIntentActivities(MAIN/LAUNCHER) + loadLabel，distinctBy package）/ `AppIndexJson`（schema_version=1）
+  - `export/`：可插拔通道 —— `FileAppIndexExporter`（tmp→rename+.done 标记）、`LogcatAppIndexExporter`（base64 分块，tag `SEETOUCH_APPLIST`）
+  - `helper/AppListExportActivity`：exported 透明 Activity，ADB `am start` 触发，文件通道失败自动兜底 logcat
+  - PC 端 `scripts/pull_applist.py`：触发 + 轮询 .done + pull + 解析，支持 logcat 通道解码
+- **两个坑（均已修）**:
+  1. **Android 11+ 包可见性**：不声明 `<queries>` 时 queryIntentActivities 只返回 2 个应用；manifest 加 MAIN/LAUNCHER intent 声明后可枚举全部
+  2. **.done 新旧混淆竞态**：PC 脚本会读到上一次导出的旧标记；协议加 request_id（PC 带 uuid 触发，.done 回显，只认本次 id）
+- **验证**（云端 Pixel 6 模拟器 / Android 14）: file/logcat 双通道数据一致；zh-CN locale 下中文应用名正确（设置/相机/云端硬盘）；待真机（Xiaomi）回归。
+- **下一步**: Stage 2 —— `device/android/app_index.py` 集成为 OPEN 策略 L0.5 层。
+
 ## 重大 bug 复盘
 
 ### 调试器不显示思维链（2026-06-26）

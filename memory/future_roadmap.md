@@ -7,7 +7,7 @@ metadata:
 
 # 产品路线图
 
-更新时间：2026-06-19
+更新时间：2026-07-05
 
 ---
 
@@ -33,13 +33,14 @@ metadata:
 
 **实现路径（分阶段）：**
 
-#### Stage 1：helper APK 验证（优先）
-- 创建 `android/` Gradle 工程（与 seetouch 平级）
-- `applicationId=com.seetouch.app`，minSdk26 / target34，零三方依赖
-- exported Activity（无 LAUNCHER filter、透明主题、后台线程查询）
-- 输出 `getExternalFilesDir/applist.json`（tmp → rename + `.done` 标记）
-- PC 端 `adb pull`；fallback = JSON 分块打到 logcat tag `PA_APPLIST`
-- 手动验证：抖音 / 哔哩哔哩等中文名 + 包名正确
+#### Stage 1：helper APK 验证 ✅（2026-07-05 已完成）
+- `android/` Gradle 工程已落地（用户 Android Studio 创建骨架，工程名 SeeTouch）
+- `applicationId=com.seetouch.app`，minSdk26 / targetSdk36，零三方依赖
+- exported 透明 Activity `helper/AppListExportActivity`（无 LAUNCHER filter、后台线程查询）
+- 输出 `getExternalFilesDir/applist.json`（tmp → rename + `.done` 标记，含 request_id 回显防新旧混淆）
+- PC 端 `scripts/pull_applist.py` 一键触发+pull；fallback = base64 分块打到 logcat tag `SEETOUCH_APPLIST`
+- 模拟器验证通过（双通道一致、zh-CN 中文应用名正确）；真机（Xiaomi）回归待做
+- 注意：manifest 必须声明 `<queries>` MAIN/LAUNCHER（Android 11+ 包可见性）
 
 #### Stage 2：seetouch 集成
 - 新增 `device/android/app_index.py`：`AppIndex` 类
