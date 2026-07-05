@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.Bundle
 import android.util.Log
 import com.chaquo.python.Python
+import org.json.JSONObject
 import kotlin.concurrent.thread
 
 /**
@@ -21,7 +22,10 @@ class TaskRunActivity : Activity() {
         super.onCreate(savedInstanceState)
         val instruction = intent.getStringExtra("instruction") ?: "打开设置"
         val apiKey = intent.getStringExtra("api_key").orEmpty()
-        val maxSteps = intent.getIntExtra("max_steps", 20)
+        val configJson = JSONObject()
+            .put("api_key", apiKey)
+            .put("max_steps", intent.getIntExtra("max_steps", 20))
+            .toString()
 
         thread(name = "seetouch-task") {
             try {
@@ -29,7 +33,7 @@ class TaskRunActivity : Activity() {
                 val result = Python.getInstance()
                     .getModule("seetouchapp.task_entry")
                     .callAttr(
-                        "run_task", instruction, apiKey, maxSteps,
+                        "run_task", instruction, configJson,
                         { stepJson: String -> Log.i(TAG, "step: $stepJson"); Unit },
                         null,
                     )

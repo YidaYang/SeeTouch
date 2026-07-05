@@ -5,6 +5,11 @@
     <!-- VLM API 调用需要联网 -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- 任务执行期间保活（目标 app 在前台时 SeeTouch 必然在后台） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Android 11+ 包可见性:声明需要查询所有桌面可启动应用 -->
     <queries>
         <intent>
@@ -23,6 +28,27 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.SeeTouch">
+
+        <!-- 主入口:任务输入 + 实时时间线 + 敏感动作确认 + 设置 -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 任务执行前台 Service -->
+        <service
+            android:name=".task.TaskExecutionService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="GUI agent 任务执行:用户发起的自动化操作需要在目标 app 处于前台时持续运行推理与手势注入" />
+        </service>
 
         <!-- 设备层核心:手势注入/截图/前台 app 跟踪/BACK/HOME -->
         <service

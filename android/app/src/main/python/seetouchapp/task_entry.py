@@ -31,8 +31,7 @@ def _ensure_logging() -> None:
 
 def run_task(
     instruction: str,
-    api_key: str,
-    max_steps: int = 20,
+    config_json: str,
     step_callback=None,
     confirm_callback=None,
 ) -> str:
@@ -40,15 +39,16 @@ def run_task(
 
     Args:
         instruction:      用户任务指令
-        api_key:          豆包 API key
-        max_steps:        最大步数
+        config_json:      运行配置 JSON:
+                          {"api_key": 必填, "model_id"/"api_url"/"thinking_mode"/
+                           "max_steps": 可选(缺省取 seetouch 默认值)}
         step_callback:    每步结束回调 callback(step_json: str),供 Kotlin 侧展示进度
         confirm_callback: 敏感动作确认回调 callback(message: str) -> bool;
                           None 时默认拒绝(安全兜底)
     """
     _ensure_logging()
     try:
-        return _run_task(instruction, api_key, max_steps, step_callback, confirm_callback)
+        return _run_task(instruction, json.loads(config_json), step_callback, confirm_callback)
     except Exception:
         return json.dumps(
             {"status": "error", "detail": traceback.format_exc()},
@@ -56,7 +56,7 @@ def run_task(
         )
 
 
-def _run_task(instruction, api_key, max_steps, step_callback, confirm_callback) -> str:
+def _run_task(instruction, config: dict, step_callback, confirm_callback) -> str:
     from com.seetouch.app.bridge import DeviceBridge  # type: ignore[import-not-found]
 
     from seetouch.core.runner import Runner
@@ -67,15 +67,26 @@ def _run_task(instruction, api_key, max_steps, step_callback, confirm_callback) 
 
     runs_dir = os.path.join(str(DeviceBridge.filesDir()), "runs")
 
+    doubao_kwargs = {"api_key": config["api_key"]}
+    for key in ("model_id", "api_url", "thinking_mode"):
+        if config.get(key):
+            doubao_kwargs[key] = config[key]
+    max_steps = int(config.get("max_steps") or 45)
+
     def prompt(message: str) -> bool:
         if confirm_callback is None:
             logger.warning("sensitive action with no confirm_callback -> deny")
             return False
         return bool(_call(confirm_callback, message))
 
+    device = NativeAndroidController()
+    # 先回桌面:agent 跟手机同机运行,不先退到后台的话
+    # 首张截图会是 SeeTouch 自己的界面,模型会误判为"应用正在处理"而反复 WAIT
+    device.go_home()
+
     runner = Runner(
-        device=NativeAndroidController(),
-        reasoner=DoubaoReasoner(DoubaoConfig(api_key=api_key)),
+        device=device,
+        reasoner=DoubaoReasoner(DoubaoConfig(**doubao_kwargs)),
         guard=Guard(prompt_fn=prompt),
         runs_dir=runs_dir,
     )
