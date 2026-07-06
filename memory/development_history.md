@@ -397,6 +397,19 @@ metadata:
 
 ---
 
+## 首次本地 APK 编译（2026-07-06）
+
+- **构建环境**:
+  - Android Studio: `D:\Programs\Android\Android Studio`（内含 JBR/JDK 21.0.10）
+  - Android SDK: `C:\Users\Danny\AppData\Local\Android\Sdk`（Platform 36.1 + Build-Tools 36/37）
+  - Gradle 9.4.1（wrapper）+ Chaquopy 16.x（CPython 3.12 嵌入）
+- **踩坑（commit `4f3f59c`）**: 项目路径 `D:\科研\` 含中文，AGP 默认拒绝非 ASCII 路径。修复：`gradle.properties` 加 `android.overridePathCheck=true`
+- **首次构建耗时**: ~6 分钟（下载 Chaquopy CPython 3.12 运行时 + pip 依赖 openai/pydantic/httpx/pillow，arm64-v8a 和 x86_64 双 ABI）
+- **产物**: `android/app/build/outputs/apk/debug/app-debug.apk`（65.7 MB，含 CPython）
+- **环境变量**: 已配置用户级 `JAVA_HOME`、`ANDROID_HOME`，并将 platform-tools / Studio JDK bin 加入 PATH
+
+---
+
 ## 相关记忆
 
 - [[technical_decisions.md]] — fuzzy 匹配移除详细原因、WAIT 协议设计
