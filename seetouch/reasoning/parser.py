@@ -21,10 +21,7 @@ from ..core.action import (
     VALID_ACTIONS,
     Action,
 )
-
-
-class ParseError(ValueError):
-    """模型输出无法解析为合法 Action。"""
+from ..core.exceptions import ParseError
 
 
 def parse_model_output(raw_text: str, image_size: Tuple[int, int]) -> Action:

@@ -1,4 +1,8 @@
-"""DeviceController 抽象接口 + 共用异常。"""
+"""DeviceController 抽象接口。
+
+DEPRECATED 异常: 使用 seetouch.core.exceptions 中的统一异常替代。
+为向后兼容保留 re-export。
+"""
 
 from __future__ import annotations
 
@@ -6,37 +10,13 @@ from typing import Protocol, Tuple, runtime_checkable
 
 from PIL import Image
 
-
-class DeviceError(Exception):
-    """设备层通用异常。"""
-
-
-class OpenAppFailed(DeviceError):
-    """OPEN 动作完全失败(L1-L4 都没成功)。"""
-
-
-class OpenAppNotFound(DeviceError):
-    """OPEN 的应用名在应用索引中未命中高置信匹配。
-
-    携带相似候选应用名,Runner 应把候选反馈给模型,
-    让它重新输出精确应用名或更短的关键词。
-    """
-
-    def __init__(self, requested: str, suggestions: list[str] | None = None):
-        super().__init__(f"app not found in index: {requested!r} suggestions={suggestions}")
-        self.requested = requested
-        self.suggestions = suggestions or []
-
-
-class OpenAppNeedsVisual(DeviceError):
-    """L1-L3 都未命中,需要由 Reasoner 通过视觉在桌面找图标。
-
-    设备已经回到桌面,Runner 应记录一笔 note,让下一次循环交给 Reasoner 处理。
-    """
-
-    def __init__(self, requested: str):
-        super().__init__(f"app launcher fallback to visual: {requested!r}")
-        self.requested = requested
+# 向后兼容: re-export 统一异常
+from ..core.exceptions import (
+    AppLaunchError as OpenAppFailed,
+    DeviceError,
+    OpenAppNeedsVisual,
+    OpenAppNotFound,
+)
 
 
 @runtime_checkable
