@@ -6,7 +6,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-42%20passing-brightgreen.svg)](#测试)
+[![Tests](https://img.shields.io/badge/tests-83%20passing-brightgreen.svg)](#测试)
 
 [English](README_EN.md) | 简体中文
 
@@ -22,7 +22,7 @@ SeeTouch 是一个基于视觉语言模型（VLM）的 Android GUI 自动化工�
 
 - **自然语言控制** — 用中文描述任务，自动完成跨应用操作
 - **视觉理解** — 基于 Doubao Vision 模型识别控件、文本、广告等复杂场景  
-- **智能启动** — 五级 fallback 策略自动适配中文 app 名称  
+- **智能启动** — 应用名一等公民策略，自动适配中文 app 名称  
 - **安全防护** — 支付、下单等敏感操作自动拦截并请求确认  
 - **模块化架构** — 设备层抽象支持扩展到 Web、桌面等平台
 
@@ -214,11 +214,11 @@ pip install -e ".[dev]"
 ### 运行测试
 
 ```bash
-# 全部测试（42 个单元测试）
+# 全部测试（83 个单元测试）
 pytest tests/
 
 # 单个模块
-pytest tests/test_parser.py -v
+pytest tests/unit/test_parser.py -v
 
 # 覆盖率报告
 pytest --cov=seetouch --cov-report=html
