@@ -20,6 +20,7 @@ from ..core.task import Task
 from ..device.android.controller import AndroidController
 from ..logging_config import configure_logging
 from ..reasoning.doubao import DoubaoReasoner
+from ..reasoning.gemini import GeminiReasoner
 from ..safety.guard import Guard
 
 
@@ -52,6 +53,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--serial", default=None, help="Android 设备 serial(多设备时使用)")
     p_run.add_argument("--max-steps", type=int, default=None, help="单任务最大步数(默认 45)")
     p_run.add_argument("--runs-dir", default=None, help="运行产物输出目录(默认 ./runs)")
+    p_run.add_argument(
+        "--reasoner",
+        choices=["doubao", "gemini"],
+        default="gemini",
+        help="推理模型选择: doubao(火山引擎) 或 gemini(Google,默认)",
+    )
 
     p_debug = sub.add_parser("debug", help="启动图形化调试器")
     p_debug.add_argument("--port", type=int, default=5000, help="调试器服务端口(默认 5000)")
@@ -71,8 +78,14 @@ def _cmd_run(args: argparse.Namespace, settings: AppSettings) -> int:
         print(f"[ERROR] init android device failed: {exc}", file=sys.stderr)
         return 1
 
+    # 根据参数选择推理模型
     try:
-        reasoner = DoubaoReasoner()
+        if args.reasoner == "gemini":
+            reasoner = GeminiReasoner()
+            logger.info("using Gemini reasoner (default: gemini-3.1-flash-lite)")
+        else:
+            reasoner = DoubaoReasoner()
+            logger.info("using Doubao reasoner")
     except Exception as exc:
         logger.error("init reasoner failed: %s", exc)
         print(f"[ERROR] init reasoner failed: {exc}", file=sys.stderr)

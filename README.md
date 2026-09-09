@@ -21,7 +21,7 @@ SeeTouch 是一个基于视觉语言模型（VLM）的 Android GUI 自动化工�
 ### 核心特性
 
 - **自然语言控制** — 用中文描述任务，自动完成跨应用操作
-- **视觉理解** — 基于 Doubao Vision 模型识别控件、文本、广告等复杂场景  
+- **视觉理解** — 支持 Gemini / Doubao Vision 多模态模型识别控件、文本、广告等复杂场景  
 - **智能启动** — 应用名一等公民策略，自动适配中文 app 名称  
 - **安全防护** — 支付、下单等敏感操作自动拦截并请求确认  
 - **模块化架构** — 设备层抽象支持扩展到 Web、桌面等平台
@@ -43,7 +43,9 @@ python -m seetouch run "打开抖音我的喜欢里搜索跳舞的视频"
 - Python 3.10+
 - Android 设备（开启 USB 调试）或模拟器
 - ADB 工具
-- 火山引擎 API Key（或其他支持的 VLM 服务）
+- **推理模型**（二选一）：
+  - **Gemini API**（推荐）— 免费，无需信用卡，15 RPM / 500 RPD
+  - Doubao Vision — 火山引擎 API Key
 
 ### 安装
 
@@ -81,22 +83,39 @@ pip install -e .
 
 ### 配置 API Key
 
-复制 `.env.example` 为 `.env`，填入你的 API Key：
+#### 方式 1: Gemini API（推荐，免费）
+
+1. 前往 [Google AI Studio](https://aistudio.google.com) 获取免费 API Key
+2. 创建 `.env` 文件：
 
 ```bash
 cp .env.example .env
 ```
 
-编辑 `.env`：
+3. 编辑 `.env`：
 ```ini
+# Gemini API (免费，15 RPM / 500 RPD)
+GEMINI_API_KEY=你的_Gemini_API_Key
+GEMINI_MODEL_ID=gemini-3.1-flash-lite  # 可选，默认即此模型
+```
+
+详细配置参考：[docs/gemini-integration.md](docs/gemini-integration.md)
+
+#### 方式 2: Doubao Vision
+
+```ini
+# 火山引擎 Doubao Vision
 VLM_API_KEY=你的火山方舟_API_Key
 DOUBAO_MODEL_ID=doubao-seed-1-6-vision-250815
 DOUBAO_API_URL=https://ark.cn-beijing.volces.com/api/v3
+SEETOUCH_THINKING_MODE=enabled  # enabled|disabled
+```
 
-# 可选配置
+#### 可选配置
+
+```ini
 SEETOUCH_DEVICE_SERIAL=       # 多设备时指定
 SEETOUCH_MAX_STEPS=45         # 单任务最大步数
-SEETOUCH_THINKING_MODE=enabled # enabled|disabled
 ```
 
 ### 自检
@@ -108,8 +127,21 @@ python -m seetouch.scripts.doctor
 
 ### 运行任务
 
+默认使用 Gemini（推荐）：
+
 ```bash
 python -m seetouch run "打开抖音"
+python -m seetouch run "在哔哩哔哩搜索采莲曲"
+```
+
+指定推理模型：
+
+```bash
+# 使用 Gemini（默认）
+python -m seetouch run "打开抖音" --reasoner gemini
+
+# 使用 Doubao
+python -m seetouch run "打开抖音" --reasoner doubao
 ```
 
 任务执行过程中：
@@ -157,6 +189,11 @@ seetouch/
 │   ├── screen.py   # 坐标转换（0-1000 归一化）
 │   └── image.py    # 图像编码
 ├── reasoning/      # 推理层
+│   ├── base.py     # Reasoner 抽象接口
+│   ├── doubao.py   # Doubao Vision 实现
+│   ├── gemini.py   # Google Gemini 实现
+│   ├── parser.py   # 模型输出解析器
+│   └── prompts.py  # Prompt 模板
 │   ├── base.py     # Reasoner 抽象接口
 │   ├── doubao.py   # Doubao Vision 实现
 │   └── prompts/    # Prompt 模板
