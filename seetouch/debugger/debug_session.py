@@ -10,7 +10,7 @@ import base64
 import io
 import logging
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from PIL import Image

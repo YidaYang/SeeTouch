@@ -14,7 +14,6 @@ from typing import Any
 
 from .event_bus import (
     EventBus,
-    STEP_COMPLETED,
     STEP_EXECUTING,
     STEP_REASONING_DONE,
     STEP_REASONING_STARTED,
@@ -234,22 +233,22 @@ class Runner:
             self._open_miss_count += 1
             if self._open_miss_count >= self.max_open_misses:
                 # 多次反馈仍未命中,升级为视觉兜底
-                notes.append(self._arm_visual_fallback(exc.requested, go_home=True))
+                notes.append(self._arm_visual_fallback(exc.request, go_home=True))
             elif exc.suggestions:
                 names = "、".join(exc.suggestions)
                 notes.append(
-                    f"OPEN '{exc.requested}' 未匹配到应用。本机相似应用名:{names}。"
+                    f"OPEN '{exc.request}' 未匹配到应用。本机相似应用名:{names}。"
                     f"下一步请从中挑一个准确名字重新 OPEN;都不相关时,"
                     f"改用更短的核心关键词重新 OPEN(系统会按关键词搜索)。"
                 )
             else:
                 notes.append(
-                    f"OPEN '{exc.requested}' 未匹配到应用,也没有相似候选。"
+                    f"OPEN '{exc.request}' 未匹配到应用,也没有相似候选。"
                     f"请改用更短的核心关键词重新 OPEN(系统会按关键词搜索)。"
                 )
             success = True
         except OpenAppNeedsVisual as exc:
-            notes.append(self._arm_visual_fallback(exc.requested))
+            notes.append(self._arm_visual_fallback(exc.request))
             success = True
         except DeviceError as exc:
             logger.warning("device error at step %d: %s", step, exc)

@@ -51,7 +51,7 @@ def parse_model_output(raw_text: str, image_size: Tuple[int, int]) -> Action:
     if simple is not None:
         return simple
 
-    raise ParseError(f"cannot parse model output: {text!r}")
+    raise ParseError(text, "cannot parse as a supported action")
 
 
 # ---------------------------- JSON 路径 ----------------------------
