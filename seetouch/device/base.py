@@ -81,3 +81,12 @@ class DeviceController(Protocol):
         非 Android 实现可以无操作。
         """
         ...
+
+
+__all__ = [
+    "DeviceController",
+    "DeviceError",
+    "OpenAppFailed",
+    "OpenAppNeedsVisual",
+    "OpenAppNotFound",
+]
